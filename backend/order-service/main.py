@@ -1,6 +1,7 @@
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from dependencies import CurrentUserPayload, get_current_user_payload, require_admin
@@ -35,9 +36,16 @@ def health_response() -> dict[str, str]:
     return {"service": SERVICE_NAME, "status": "healthy"}
 
 
+def ensure_order_user_snapshot_columns() -> None:
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE orders ADD COLUMN IF NOT EXISTS user_name VARCHAR(120)"))
+        connection.execute(text("ALTER TABLE orders ADD COLUMN IF NOT EXISTS user_email VARCHAR(255)"))
+
+
 @app.on_event("startup")
 def startup() -> None:
     Base.metadata.create_all(bind=engine)
+    ensure_order_user_snapshot_columns()
     db = SessionLocal()
     try:
         seed_orders(db)
@@ -63,7 +71,7 @@ def create_order_endpoint(
     current_user: CurrentUserPayload = Depends(get_current_user_payload),
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
-    order = create_order(db=db, payload=payload, user_id=current_user.user_id)
+    order = create_order(db=db, payload=payload, current_user=current_user)
     return success_response("Order created successfully.", OrderResponse.model_validate(order))
 
 

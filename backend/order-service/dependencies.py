@@ -14,6 +14,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 class CurrentUserPayload:
     user_id: int
     email: str
+    name: str
     role: str
     jti: str | None
 
@@ -40,6 +41,7 @@ def get_current_user_payload(
         )
         user_id = int(payload.get("sub", ""))
         email = str(payload.get("email", ""))
+        name = str(payload.get("name") or payload.get("full_name") or email or "User")
         role = str(payload.get("role", ""))
         jti = payload.get("jti")
     except (JWTError, TypeError, ValueError):
@@ -51,6 +53,7 @@ def get_current_user_payload(
     return CurrentUserPayload(
         user_id=user_id,
         email=email,
+        name=name,
         role=role,
         jti=str(jti) if jti else None,
     )

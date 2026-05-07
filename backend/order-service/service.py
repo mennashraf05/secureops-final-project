@@ -14,8 +14,13 @@ INVENTORY_SERVICE_URL = os.getenv("INVENTORY_SERVICE_URL", "http://inventory-ser
 INVENTORY_DEDUCT_STOCK_URL = f"{INVENTORY_SERVICE_URL}/products/internal/deduct-stock"
 
 
-def create_order(db: Session, payload: OrderCreate, user_id: int) -> Order:
-    order = Order(user_id=user_id, status="pending")
+def create_order(db: Session, payload: OrderCreate, current_user: CurrentUserPayload) -> Order:
+    order = Order(
+        user_id=current_user.user_id,
+        user_name=current_user.name or current_user.email or "User",
+        user_email=current_user.email,
+        status="pending",
+    )
     for item in payload.items:
         order.items.append(
             OrderItem(

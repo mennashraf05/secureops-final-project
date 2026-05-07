@@ -24,6 +24,9 @@ services:
     container_name: secureops-frontend
     environment:
       FRONTEND_PORT: ${FRONTEND_PORT}
+    volumes:
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
     expose:
       - "5173"
     networks:
@@ -165,3 +168,4 @@ volumes:
   postgres-data:
   rabbitmq-data:
   file-storage:
+  frontend-node-modules:

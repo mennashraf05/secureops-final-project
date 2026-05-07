@@ -11,6 +11,8 @@ export type OrderItem = {
 export type Order = {
   id: number;
   user_id: number;
+  user_name?: string | null;
+  user_email?: string | null;
   status: OrderStatus;
   admin_response: string | null;
   created_at: string;

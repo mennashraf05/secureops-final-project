@@ -36,6 +36,21 @@ function orderQuantities(order: Order) {
   </div>;
 }
 
+function orderUser(order: Order) {
+  const name = order.user_name?.trim();
+  const email = order.user_email?.trim();
+
+  if (!name && !email) {
+    return <span>User #{order.user_id}</span>;
+  }
+
+  return <div>
+    <div className="font-semibold text-slate-800">{name || email}</div>
+    {email && email !== name ? <div className="text-xs text-slate-500">{email}</div> : null}
+    <div className="text-xs text-slate-400">User #{order.user_id}</div>
+  </div>;
+}
+
 export default function Orders() {
   const { logoutUser } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -124,7 +139,7 @@ export default function Orders() {
 
   const rows = useMemo(() => orders.map((order) => [
     `#${order.id}`,
-    order.user_id,
+    orderUser(order),
     orderItems(order),
     orderQuantities(order),
     <Badge tone={statusTone(order.status)}>{order.status}</Badge>,

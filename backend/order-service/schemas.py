@@ -35,6 +35,8 @@ class OrderItemResponse(BaseModel):
 class OrderResponse(BaseModel):
     id: int
     user_id: int
+    user_name: str | None
+    user_email: str | None
     status: str
     admin_response: str | None
     created_at: datetime

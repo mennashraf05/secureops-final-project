@@ -81,10 +81,5 @@ export default function MyOrders() {
       {!isLoading && !error && orders.length === 0 ? <p className="text-sm font-semibold text-slate-500">You have not submitted any product requests yet.</p> : null}
       {!isLoading && orders.length > 0 ? <DataTable columns={['Order ID','Product','Quantity','Status','Date','Admin Response']} rows={rows}/> : null}
     </SectionCard>
-
-    <section className="mt-7 grid gap-5 md:grid-cols-2">
-      <SectionCard title="Order Details" subtitle="Each request shows submitted items, quantities, status, and admin response."/>
-      <SectionCard title="Empty State" subtitle="Shown when you have not submitted any requests."/>
-    </section>
   </>;
 }
