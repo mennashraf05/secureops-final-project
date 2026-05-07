@@ -48,3 +48,11 @@ Part 2 implements the Auth Service only. See `docs/PART_2_AUTH.md` for endpoints
 ## Part 2.5 Frontend Auth
 
 Part 2.5 connects the existing React frontend to the Auth Service. See `docs/PART_2_5_FRONTEND_AUTH.md` for browser test steps.
+
+## Part 3 Inventory
+
+Part 3 implements the Inventory Service product management API. See `docs/PART_3_INVENTORY.md` for endpoints, RBAC rules, and PowerShell test commands.
+
+## Part 3.5 Frontend Products
+
+Part 3.5 connects the existing frontend product pages to the Inventory Service. See `docs/PART_3_5_FRONTEND_PRODUCTS.md` for browser test steps.
