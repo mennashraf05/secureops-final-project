@@ -1,0 +1,25 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #F8FAFC; color: #0F172A; }
+button, input, select, textarea { font: inherit; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.glass { background: rgba(255,255,255,.78); backdrop-filter: blur(18px); border: 1px solid rgba(226,232,240,.8); }
+.dark-glass { background: rgba(7,17,31,.72); backdrop-filter: blur(18px); border: 1px solid rgba(56,189,248,.22); }
+.grid-bg {
+  background-color: #07111F;
+  background-image:
+    linear-gradient(rgba(56,189,248,.11) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56,189,248,.11) 1px, transparent 1px),
+    radial-gradient(circle at 20% 20%, rgba(56,189,248,.18), transparent 28%),
+    radial-gradient(circle at 80% 10%, rgba(124,58,237,.22), transparent 30%),
+    linear-gradient(135deg, #07111F 0%, #0F172A 48%, #1E3A8A 100%);
+  background-size: 32px 32px, 32px 32px, 100% 100%, 100% 100%, 100% 100%;
+  background-position: 0 0, 0 0, center, center, center;
+}
+.shimmer { background: linear-gradient(90deg,#f1f5f9 0%,#e2e8f0 40%,#f8fafc 80%); background-size: 400px 100%; animation: shimmer 2s infinite linear; }

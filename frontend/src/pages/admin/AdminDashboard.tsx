@@ -1,0 +1,18 @@
+import { Boxes, FileCheck, ShieldAlert, Zap } from 'lucide-react';
+import { metrics, products, securityEvents, auditLogs } from '../../data/mockData';
+import { KpiCard } from '../../components/cards/KpiCard';
+import { SectionCard } from '../../components/cards/SectionCard';
+import { DataTable } from '../../components/tables/DataTable';
+import { EventsBarChart, RiskLineChart } from '../../components/charts/Charts';
+import { Button } from '../../components/ui/Button';
+import { PageHeader } from '../../components/layout/Page';
+
+export default function AdminDashboard() {
+  return <><PageHeader title="Operations & Security Command Center" subtitle="Monitor inventory operations, distributed services, background jobs, and security events."/>
+    <section className="mb-7 overflow-hidden rounded-[2rem] bg-gradient-to-br from-navy via-ink to-blue-900 p-7 text-white shadow-glow grid-bg"><div className="flex flex-col justify-between gap-8 lg:flex-row"><div><p className="text-sm font-bold uppercase tracking-widest text-cyan-300">All Systems Operational</p><h2 className="mt-3 text-3xl font-extrabold">Welcome Admin — distributed inventory is protected.</h2><p className="mt-2 max-w-2xl text-cyan-100/75">Risk scoring, audit activity, RabbitMQ jobs, secure files, and inventory signals are available from this command center.</p></div><div className="flex flex-wrap gap-3 self-start"><Button>Run Security Check</Button><Button variant="dark">Generate Report</Button></div></div></section>
+    <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{metrics.map(m => <KpiCard key={m.label} {...m}/>)}</section>
+    <section className="mt-7 grid gap-6 xl:grid-cols-2"><SectionCard title="Risk Score Trend" subtitle="Weekly risk score movement"><RiskLineChart/></SectionCard><SectionCard title="Security Events Overview" subtitle="Blocked and reviewed events"><EventsBarChart/></SectionCard></section>
+    <section className="mt-7 grid gap-6 xl:grid-cols-3"><SectionCard title="Recent Security Alerts" subtitle="Live suspicious activity"><DataTable columns={['Event','User / IP','Severity','Status']} rows={securityEvents.slice(0,4).map(e=>[e.event,e.user,e.severity,e.status])}/></SectionCard><SectionCard title="Low Stock Products" subtitle="Inventory requiring attention"><DataTable columns={['Product','SKU','Qty','Status']} rows={products.filter(p=>p.status!=='In Stock').map(p=>[p.name,p.sku,p.quantity,p.status])}/></SectionCard><SectionCard title="Quick Actions" subtitle="Common admin operations"><div className="grid gap-3"><Button><Boxes className="mr-2 inline" size={17}/>Add Product</Button><Button variant="ghost"><FileCheck className="mr-2 inline" size={17}/>Verify File Integrity</Button><Button variant="ghost"><ShieldAlert className="mr-2 inline" size={17}/>Open Security Center</Button><Button variant="ghost"><Zap className="mr-2 inline" size={17}/>Run Attack Simulation</Button></div></SectionCard></section>
+    <section className="mt-7"><SectionCard title="System Health" subtitle="Nginx, Auth, Inventory, Orders, Files, PostgreSQL, RabbitMQ, Worker Service"><div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">{['Nginx Gateway','Auth Service','Inventory Service','Order Service','File Service','Report Service','PostgreSQL','RabbitMQ','Worker Service'].map((s,i)=><div key={s} className="rounded-2xl bg-slate-50 p-4"><span className={`mr-2 inline-block h-2.5 w-2.5 animate-pulseSoft rounded-full ${i===7?'bg-amber-400':'bg-emerald-500'}`}/><p className="font-bold text-slate-800">{s}</p><p className="mt-1 text-xs text-slate-500">99.9% uptime • {24+i*5}ms</p></div>)}</div></SectionCard></section>
+  </>;
+}

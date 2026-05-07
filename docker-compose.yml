@@ -1,0 +1,167 @@
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: secureops-nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - auth-service
+      - inventory-service
+      - order-service
+      - file-service
+      - report-service
+      - audit-service
+    networks:
+      - secureops-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: secureops-frontend
+    environment:
+      FRONTEND_PORT: ${FRONTEND_PORT}
+    expose:
+      - "5173"
+    networks:
+      - secureops-network
+
+  auth-service:
+    build:
+      context: ./backend
+      dockerfile: auth-service/Dockerfile
+    container_name: secureops-auth-service
+    env_file:
+      - .env
+    expose:
+      - "8000"
+    depends_on:
+      - postgres
+    networks:
+      - secureops-network
+
+  inventory-service:
+    build:
+      context: ./backend
+      dockerfile: inventory-service/Dockerfile
+    container_name: secureops-inventory-service
+    env_file:
+      - .env
+    expose:
+      - "8000"
+    depends_on:
+      - postgres
+    networks:
+      - secureops-network
+
+  order-service:
+    build:
+      context: ./backend
+      dockerfile: order-service/Dockerfile
+    container_name: secureops-order-service
+    env_file:
+      - .env
+    expose:
+      - "8000"
+    depends_on:
+      - postgres
+      - rabbitmq
+    networks:
+      - secureops-network
+
+  file-service:
+    build:
+      context: ./backend
+      dockerfile: file-service/Dockerfile
+    container_name: secureops-file-service
+    env_file:
+      - .env
+    expose:
+      - "8000"
+    depends_on:
+      - postgres
+    volumes:
+      - file-storage:/app/file-service/storage
+    networks:
+      - secureops-network
+
+  report-service:
+    build:
+      context: ./backend
+      dockerfile: report-service/Dockerfile
+    container_name: secureops-report-service
+    env_file:
+      - .env
+    expose:
+      - "8000"
+    depends_on:
+      - postgres
+    networks:
+      - secureops-network
+
+  audit-service:
+    build:
+      context: ./backend
+      dockerfile: audit-service/Dockerfile
+    container_name: secureops-audit-service
+    env_file:
+      - .env
+    expose:
+      - "8000"
+    depends_on:
+      - postgres
+    networks:
+      - secureops-network
+
+  worker-service:
+    build:
+      context: ./backend
+      dockerfile: worker-service/Dockerfile
+    container_name: secureops-worker-service
+    env_file:
+      - .env
+    depends_on:
+      - rabbitmq
+    networks:
+      - secureops-network
+
+  postgres:
+    image: postgres:16
+    container_name: secureops-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - secureops-network
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: secureops-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "15673:15672"
+    expose:
+      - "5672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - secureops-network
+
+networks:
+  secureops-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  rabbitmq-data:
+  file-storage:
