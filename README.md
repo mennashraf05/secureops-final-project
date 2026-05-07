@@ -44,3 +44,7 @@ RabbitMQ management:
 ## Part 2 Auth
 
 Part 2 implements the Auth Service only. See `docs/PART_2_AUTH.md` for endpoints, demo accounts, and PowerShell test commands.
+
+## Part 2.5 Frontend Auth
+
+Part 2.5 connects the existing React frontend to the Auth Service. See `docs/PART_2_5_FRONTEND_AUTH.md` for browser test steps.

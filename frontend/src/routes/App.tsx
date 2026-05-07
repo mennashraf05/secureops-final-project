@@ -1,8 +1,10 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { AuthProvider } from '../auth/AuthContext';
 import Landing from '../pages/Landing';
 import Login from '../pages/auth/Login';
 import Register from '../pages/auth/Register';
 import { AppLayout } from '../components/layout/AppLayout';
+import { ProtectedRoute } from './ProtectedRoute';
 import AdminDashboard from '../pages/admin/AdminDashboard';
 import Products from '../pages/admin/Products';
 import Orders from '../pages/admin/Orders';
@@ -20,11 +22,11 @@ import MyFiles from '../pages/user/MyFiles';
 import Profile from '../pages/user/Profile';
 
 export default function App() {
-  return <Routes>
+  return <AuthProvider><Routes>
     <Route path="/" element={<Landing/>}/>
     <Route path="/login" element={<Login/>}/>
     <Route path="/register" element={<Register/>}/>
-    <Route path="/admin" element={<AppLayout role="admin"/>}>
+    <Route path="/admin" element={<ProtectedRoute requiredRole="admin"><AppLayout role="admin"/></ProtectedRoute>}>
       <Route index element={<Navigate to="/admin/dashboard" replace/>}/>
       <Route path="dashboard" element={<AdminDashboard/>}/>
       <Route path="products" element={<Products/>}/>
@@ -37,7 +39,7 @@ export default function App() {
       <Route path="architecture" element={<Architecture/>}/>
       <Route path="settings" element={<Settings/>}/>
     </Route>
-    <Route path="/user" element={<AppLayout role="user"/>}>
+    <Route path="/user" element={<ProtectedRoute requiredRole="user"><AppLayout role="user"/></ProtectedRoute>}>
       <Route index element={<Navigate to="/user/dashboard" replace/>}/>
       <Route path="dashboard" element={<UserDashboard/>}/>
       <Route path="products" element={<UserProducts/>}/>
@@ -45,5 +47,5 @@ export default function App() {
       <Route path="files" element={<MyFiles/>}/>
       <Route path="profile" element={<Profile/>}/>
     </Route>
-  </Routes>;
+  </Routes></AuthProvider>;
 }
