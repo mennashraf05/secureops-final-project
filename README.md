@@ -60,3 +60,15 @@ Part 3.5 connects the existing frontend product pages to the Inventory Service. 
 ## Part 4 Orders
 
 Part 4 implements the Order Service backend for product requests. See `docs/PART_4_ORDERS.md` for endpoints, RBAC rules, and PowerShell test commands.
+
+## Part 4.5 Frontend Orders
+
+Part 4.5 connects the existing frontend order pages to the Order Service. Users can submit real product requests from the User Products page, view their own orders in My Orders, and admins can view, approve, or reject orders from the Admin Orders page. See `docs/PART_4_5_FRONTEND_ORDERS.md` for browser test steps.
+
+## Part 4.6 Stock Deduction on Approval
+
+Part 4.6 adds automatic stock deduction when an admin approves an order. Stock is deducted only after approval, not when the order is created or rejected. The Order Service communicates with the Inventory Service using an internal API key for service-to-service security. See `docs/PART_4_6_STOCK_DEDUCTION.md` for implementation details and tests.
+
+## Part 4.7 Admin Order User Info
+
+Part 4.7 improves the Admin Orders page by showing user information instead of only numeric user IDs. Orders now store user snapshot fields such as `user_name` and `user_email`, with fallback handling for older orders. See `docs/PART_4_7_ADMIN_ORDER_USER_INFO.md` for details.
