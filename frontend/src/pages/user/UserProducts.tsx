@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { createOrder } from '../../api/orders';
 import { getProducts } from '../../api/products';
 import { useAuth } from '../../auth/AuthContext';
 import { PageHeader } from '../../components/layout/Page';
@@ -15,11 +17,13 @@ function stockStatus(quantity: number) {
 
 export default function UserProducts() {
   const { logoutUser } = useAuth();
+  const navigate = useNavigate();
   const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [availability, setAvailability] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [submittingProductId, setSubmittingProductId] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -54,8 +58,36 @@ export default function UserProducts() {
     return products.filter((product) => stockStatus(product.quantity) === availability);
   }, [availability, products]);
 
-  function showRequestPlaceholder() {
-    setMessage('Product request feature will be available after Order Service integration.');
+  async function requestProduct(product: Product) {
+    setMessage('');
+    setError('');
+
+    if (product.quantity === 0) {
+      setMessage('This product is currently out of stock.');
+      return;
+    }
+
+    setSubmittingProductId(product.id);
+    try {
+      await createOrder({
+        items: [{
+          product_id: product.id,
+          product_name: product.name,
+          product_sku: product.sku,
+          quantity: 1,
+        }],
+      });
+      setMessage('Product request submitted successfully.');
+      window.setTimeout(() => navigate('/user/orders'), 700);
+    } catch (err) {
+      const nextError = err instanceof Error ? err.message : 'Could not submit product request.';
+      if (nextError === 'Invalid or expired token.') {
+        await logoutUser();
+      }
+      setError(nextError);
+    } finally {
+      setSubmittingProductId(null);
+    }
   }
 
   return <>
@@ -87,11 +119,13 @@ export default function UserProducts() {
             <Badge tone={status === 'In Stock' ? 'green' : status === 'Low Stock' ? 'orange' : 'red'}>{status}</Badge>
           </div>
           <div className="mt-4 text-sm font-semibold text-slate-600">${Number(product.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-          <Button className="mt-5" disabled={product.quantity === 0} onClick={showRequestPlaceholder}>Request Product</Button>
+          <Button className="mt-5" disabled={submittingProductId === product.id} onClick={() => void requestProduct(product)}>
+            {submittingProductId === product.id ? 'Submitting...' : 'Request Product'}
+          </Button>
         </SectionCard>;
       })}
     </section>}
 
-    <section className="mt-7"><SectionCard title="Request Product Modal" subtitle="Product request remains a placeholder until Order Service integration."/></section>
+    <section className="mt-7"><SectionCard title="Request Product" subtitle="Requests are submitted to the Order Service and reviewed by an admin."/></section>
   </>;
 }

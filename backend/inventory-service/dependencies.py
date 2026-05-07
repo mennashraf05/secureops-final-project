@@ -1,6 +1,7 @@
 from dataclasses import dataclass
+from secrets import compare_digest
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 
@@ -66,3 +67,13 @@ def require_admin(
         )
 
     return current_user
+
+
+def require_internal_api_key(
+    x_internal_api_key: str | None = Header(default=None),
+) -> None:
+    if not x_internal_api_key or not compare_digest(x_internal_api_key, settings.internal_api_key):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid internal API key.",
+        )

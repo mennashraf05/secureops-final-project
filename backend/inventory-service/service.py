@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 
 from models import Product
-from schemas import ProductCreate, ProductUpdate, StockUpdate
+from schemas import InternalStockDeductRequest, ProductCreate, ProductUpdate, StockUpdate
 
 
 def normalize_sku(sku: str) -> str:
@@ -103,6 +103,44 @@ def update_product_stock(db: Session, product_id: int, payload: StockUpdate) -> 
     db.commit()
     db.refresh(product)
     return product
+
+
+def deduct_product_stock(db: Session, payload: InternalStockDeductRequest) -> list[Product]:
+    requested_quantities: dict[int, int] = {}
+    for item in payload.items:
+        requested_quantities[item.product_id] = requested_quantities.get(item.product_id, 0) + item.quantity
+
+    products = (
+        db.query(Product)
+        .filter(Product.id.in_(requested_quantities.keys()))
+        .with_for_update()
+        .all()
+    )
+    products_by_id = {product.id: product for product in products}
+
+    for product_id in requested_quantities:
+        if product_id not in products_by_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Product not found.",
+            )
+
+    for product_id, quantity in requested_quantities.items():
+        product = products_by_id[product_id]
+        if product.quantity < quantity:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Insufficient stock for product.",
+            )
+
+    for product_id, quantity in requested_quantities.items():
+        products_by_id[product_id].quantity -= quantity
+
+    db.commit()
+    for product in products:
+        db.refresh(product)
+
+    return products
 
 
 def delete_product(db: Session, product_id: int) -> None:

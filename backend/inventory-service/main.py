@@ -3,11 +3,12 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from dependencies import CurrentUserPayload, get_current_user_payload, require_admin
-from schemas import ProductCreate, ProductResponse, ProductUpdate, StockUpdate
+from dependencies import CurrentUserPayload, get_current_user_payload, require_admin, require_internal_api_key
+from schemas import InternalStockDeductRequest, ProductCreate, ProductResponse, ProductUpdate, StockUpdate
 from seed import seed_products
 from service import (
     create_product,
+    deduct_product_stock,
     delete_product,
     get_product,
     list_products,
@@ -89,6 +90,19 @@ def list_products_endpoint(
     )
     return success_response(
         "Products retrieved successfully.",
+        [ProductResponse.model_validate(product) for product in products],
+    )
+
+
+@app.post("/products/internal/deduct-stock")
+def deduct_stock_endpoint(
+    payload: InternalStockDeductRequest,
+    internal_auth: None = Depends(require_internal_api_key),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    products = deduct_product_stock(db=db, payload=payload)
+    return success_response(
+        "Product stock deducted successfully.",
         [ProductResponse.model_validate(product) for product in products],
     )
 

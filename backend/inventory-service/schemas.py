@@ -24,6 +24,15 @@ class StockUpdate(BaseModel):
     quantity: int = Field(..., ge=0)
 
 
+class InternalStockDeductItem(BaseModel):
+    product_id: int = Field(..., gt=0)
+    quantity: int = Field(..., gt=0)
+
+
+class InternalStockDeductRequest(BaseModel):
+    items: list[InternalStockDeductItem] = Field(..., min_length=1)
+
+
 class ProductResponse(BaseModel):
     id: int
     name: str
