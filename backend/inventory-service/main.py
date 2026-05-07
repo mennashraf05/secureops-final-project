@@ -1,6 +1,22 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 
+from dependencies import CurrentUserPayload, get_current_user_payload, require_admin
+from schemas import ProductCreate, ProductResponse, ProductUpdate, StockUpdate
+from seed import seed_products
+from service import (
+    create_product,
+    delete_product,
+    get_product,
+    list_products,
+    update_product,
+    update_product_stock,
+)
+from shared.database import Base, SessionLocal, engine, get_db
 from shared.errors import safe_exception_handler, safe_http_exception_handler
+from shared.responses import success_response
 
 
 SERVICE_NAME = "inventory-service"
@@ -10,8 +26,30 @@ app.add_exception_handler(Exception, safe_exception_handler)
 app.add_exception_handler(HTTPException, safe_http_exception_handler)
 
 
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "success": False,
+            "message": "Invalid request data.",
+            "data": None,
+        },
+    )
+
+
 def health_response() -> dict[str, str]:
     return {"service": SERVICE_NAME, "status": "healthy"}
+
+
+@app.on_event("startup")
+def startup() -> None:
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        seed_products(db)
+    finally:
+        db.close()
 
 
 @app.get("/health")
@@ -22,3 +60,76 @@ def health() -> dict[str, str]:
 @app.get("/products/health")
 def gateway_health() -> dict[str, str]:
     return health_response()
+
+
+@app.post("/products", status_code=status.HTTP_201_CREATED)
+def create_product_endpoint(
+    payload: ProductCreate,
+    current_user: CurrentUserPayload = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    product = create_product(db=db, payload=payload, created_by=current_user.user_id)
+    return success_response("Product created successfully.", ProductResponse.model_validate(product))
+
+
+@app.get("/products")
+@app.get("/products/")
+def list_products_endpoint(
+    search: str | None = Query(default=None),
+    category: str | None = Query(default=None),
+    low_stock_only: bool = Query(default=False),
+    current_user: CurrentUserPayload = Depends(get_current_user_payload),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    products = list_products(
+        db=db,
+        search=search,
+        category=category,
+        low_stock_only=low_stock_only,
+    )
+    return success_response(
+        "Products retrieved successfully.",
+        [ProductResponse.model_validate(product) for product in products],
+    )
+
+
+@app.get("/products/{product_id}")
+def get_product_endpoint(
+    product_id: int,
+    current_user: CurrentUserPayload = Depends(get_current_user_payload),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    product = get_product(db=db, product_id=product_id)
+    return success_response("Product retrieved successfully.", ProductResponse.model_validate(product))
+
+
+@app.patch("/products/{product_id}")
+def update_product_endpoint(
+    product_id: int,
+    payload: ProductUpdate,
+    current_user: CurrentUserPayload = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    product = update_product(db=db, product_id=product_id, payload=payload)
+    return success_response("Product updated successfully.", ProductResponse.model_validate(product))
+
+
+@app.patch("/products/{product_id}/stock")
+def update_stock_endpoint(
+    product_id: int,
+    payload: StockUpdate,
+    current_user: CurrentUserPayload = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    product = update_product_stock(db=db, product_id=product_id, payload=payload)
+    return success_response("Product stock updated successfully.", ProductResponse.model_validate(product))
+
+
+@app.delete("/products/{product_id}")
+def delete_product_endpoint(
+    product_id: int,
+    current_user: CurrentUserPayload = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    delete_product(db=db, product_id=product_id)
+    return success_response("Product deleted successfully.")

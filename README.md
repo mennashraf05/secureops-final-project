@@ -56,3 +56,7 @@ Part 3 implements the Inventory Service product management API. See `docs/PART_3
 ## Part 3.5 Frontend Products
 
 Part 3.5 connects the existing frontend product pages to the Inventory Service. See `docs/PART_3_5_FRONTEND_PRODUCTS.md` for browser test steps.
+
+## Part 4 Orders
+
+Part 4 implements the Order Service backend for product requests. See `docs/PART_4_ORDERS.md` for endpoints, RBAC rules, and PowerShell test commands.
