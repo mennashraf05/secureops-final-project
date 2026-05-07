@@ -50,11 +50,13 @@ def health() -> dict[str, str]:
     return health_response()
 
 
+@app.get("/orders/health/", include_in_schema=False)
 @app.get("/orders/health")
 def gateway_health() -> dict[str, str]:
     return health_response()
 
 
+@app.post("/orders/", status_code=status.HTTP_201_CREATED, include_in_schema=False)
 @app.post("/orders", status_code=status.HTTP_201_CREATED)
 def create_order_endpoint(
     payload: OrderCreate,
@@ -65,6 +67,7 @@ def create_order_endpoint(
     return success_response("Order created successfully.", OrderResponse.model_validate(order))
 
 
+@app.get("/orders/my/", include_in_schema=False)
 @app.get("/orders/my")
 def my_orders_endpoint(
     current_user: CurrentUserPayload = Depends(get_current_user_payload),
@@ -77,6 +80,7 @@ def my_orders_endpoint(
     )
 
 
+@app.get("/orders/", include_in_schema=False)
 @app.get("/orders")
 def list_orders_endpoint(
     order_status: str | None = Query(default=None, alias="status"),
@@ -90,6 +94,7 @@ def list_orders_endpoint(
     )
 
 
+@app.get("/orders/{order_id}/", include_in_schema=False)
 @app.get("/orders/{order_id}")
 def get_order_endpoint(
     order_id: int,
@@ -100,6 +105,7 @@ def get_order_endpoint(
     return success_response("Order retrieved successfully.", OrderResponse.model_validate(order))
 
 
+@app.patch("/orders/{order_id}/approve/", include_in_schema=False)
 @app.patch("/orders/{order_id}/approve")
 def approve_order_endpoint(
     order_id: int,
@@ -110,6 +116,7 @@ def approve_order_endpoint(
     return success_response("Order approved successfully.", OrderResponse.model_validate(order))
 
 
+@app.patch("/orders/{order_id}/reject/", include_in_schema=False)
 @app.patch("/orders/{order_id}/reject")
 def reject_order_endpoint(
     order_id: int,
