@@ -82,4 +82,4 @@ Part 6 implements asynchronous report generation using the Report Service, Rabbi
 
 ## Part 6.5 Frontend Reports
 
-Part 6.5 connects the Admin Reports page to the Report Service. Admins can create inventory report jobs, view job statuses, refresh results, and confirm worker completion from the UI. See `docs/PART_6_5_FRONTEND_REPORTS.md` for browser test steps.
+Part 6.5 connects the Admin Reports page to the Report Service. Admins can create inventory report jobs, view job statuses, and verify worker completion through the UI. See `docs/PART_6_5_FRONTEND_REPORTS.md` for browser test steps.
