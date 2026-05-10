@@ -110,4 +110,4 @@ Part 8.6 adds per-user risk scoring derived from audit logs so admins can identi
 
 ## Part 9 Email Verification + Mandatory 2FA
 
-Part 9 adds email verification for new accounts, email setup links for admin-created accounts, and mandatory authenticator-app two-factor authentication for all users. JWT tokens are issued only after successful email/password login and 2FA verification.
+Part 9 adds email verification for new accounts, email setup links for admin-created accounts, and mandatory two-factor authentication for all users. `/auth/login` validates email/password and starts the 2FA step; JWT tokens are issued only after `/auth/2fa/verify` succeeds. See `docs/AUTH_2FA_TEST_FLOW.md` for the updated PowerShell login commands.

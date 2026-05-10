@@ -75,8 +75,8 @@ Audit Report remains disabled because Audit Logs are not implemented in Part 6.6
 ## PowerShell Tests
 
 ```powershell
-$adminLogin = Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/auth/login' -ContentType 'application/json' -Body (@{ email = 'admin@secureops.com'; password = 'Admin@12345' } | ConvertTo-Json)
-$adminHeaders = @{ Authorization = "Bearer $($adminLogin.access_token)" }
+# First create $adminHeaders and $userHeaders using docs/AUTH_2FA_TEST_FLOW.md.
+# /auth/login no longer returns access_token directly.
 
 $inventory = Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/reports/inventory' -Headers $adminHeaders
 $inventoryJobId = $inventory.data.id
@@ -101,8 +101,6 @@ try {
   "missing_download_status=$([int]$_.Exception.Response.StatusCode)"
 }
 
-$userLogin = Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/auth/login' -ContentType 'application/json' -Body (@{ email = 'user@secureops.com'; password = 'User@12345' } | ConvertTo-Json)
-$userHeaders = @{ Authorization = "Bearer $($userLogin.access_token)" }
 try {
   Invoke-WebRequest -UseBasicParsing -Method Post -Uri 'http://localhost:8080/reports/low-stock' -Headers $userHeaders
 } catch {

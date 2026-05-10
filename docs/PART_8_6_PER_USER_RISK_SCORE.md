@@ -55,13 +55,11 @@ Per-user risk scores identify which users or system actors are associated with r
 ## PowerShell Test Flow
 
 ```powershell
-$adminLogin = Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/auth/login' -ContentType 'application/json' -Body (@{ email = 'admin@secureops.com'; password = 'Admin@12345' } | ConvertTo-Json)
-$adminHeaders = @{ Authorization = "Bearer $($adminLogin.access_token)" }
+# First create $adminHeaders and $userHeaders using docs/AUTH_2FA_TEST_FLOW.md.
+# /auth/login no longer returns access_token directly.
 
 Invoke-RestMethod -Method Get -Uri 'http://localhost:8080/audit/security/user-risk' -Headers $adminHeaders
 
-$userLogin = Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/auth/login' -ContentType 'application/json' -Body (@{ email = 'user@secureops.com'; password = 'User@12345' } | ConvertTo-Json)
-$userHeaders = @{ Authorization = "Bearer $($userLogin.access_token)" }
 try {
   Invoke-WebRequest -UseBasicParsing -Method Get -Uri 'http://localhost:8080/audit/security/user-risk' -Headers $userHeaders
 } catch {

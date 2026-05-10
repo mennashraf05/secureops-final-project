@@ -55,24 +55,7 @@ Start services:
 docker compose up --build
 ```
 
-Login as admin and user:
-
-```powershell
-$adminLogin = Invoke-RestMethod `
-  -Method Post `
-  -Uri "http://localhost:8080/auth/login" `
-  -ContentType "application/json" `
-  -Body (@{ email = "admin@secureops.com"; password = "Admin@12345" } | ConvertTo-Json)
-
-$userLogin = Invoke-RestMethod `
-  -Method Post `
-  -Uri "http://localhost:8080/auth/login" `
-  -ContentType "application/json" `
-  -Body (@{ email = "user@secureops.com"; password = "User@12345" } | ConvertTo-Json)
-
-$adminToken = $adminLogin.access_token
-$userToken = $userLogin.access_token
-```
+Before running protected endpoint tests, obtain `$adminToken` and `$userToken` using the mandatory 2FA flow in `docs/AUTH_2FA_TEST_FLOW.md`. `/auth/login` no longer returns `access_token` directly.
 
 Check product quantity before order:
 

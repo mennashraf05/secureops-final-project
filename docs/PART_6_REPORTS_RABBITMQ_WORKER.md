@@ -106,24 +106,12 @@ The admin request returns after the Report Service creates and queues a job. The
 
 ## PowerShell Test Flow
 
-Login as admin and save token:
+Before running protected endpoint tests, create `$adminHeaders` and `$userHeaders` using the mandatory 2FA flow in `docs/AUTH_2FA_TEST_FLOW.md`. `/auth/login` no longer returns `access_token` directly.
 
 ```powershell
-$adminLogin = Invoke-RestMethod -Method Post -Uri "http://localhost:8080/auth/login" `
-  -ContentType "application/json" `
-  -Body (@{ email = "admin@secureops.com"; password = "Admin@12345" } | ConvertTo-Json)
-
-$adminHeaders = @{ Authorization = "Bearer $($adminLogin.access_token)" }
-```
-
-Login as normal user and save token:
-
-```powershell
-$userLogin = Invoke-RestMethod -Method Post -Uri "http://localhost:8080/auth/login" `
-  -ContentType "application/json" `
-  -Body (@{ email = "user@secureops.com"; password = "User@12345" } | ConvertTo-Json)
-
-$userHeaders = @{ Authorization = "Bearer $($userLogin.access_token)" }
+# From docs/AUTH_2FA_TEST_FLOW.md:
+# $adminHeaders = @{ Authorization = "Bearer $adminToken" }
+# $userHeaders = @{ Authorization = "Bearer $userToken" }
 ```
 
 Normal user should be rejected:

@@ -58,16 +58,14 @@ Each daily score is capped at 100.
 ## PowerShell Test Flow
 
 ```powershell
-$adminLogin = Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/auth/login' -ContentType 'application/json' -Body (@{ email = 'admin@secureops.com'; password = 'Admin@12345' } | ConvertTo-Json)
-$adminHeaders = @{ Authorization = "Bearer $($adminLogin.access_token)" }
+# First create $adminHeaders and $userHeaders using docs/AUTH_2FA_TEST_FLOW.md.
+# /auth/login no longer returns access_token directly.
 
 $charts = Invoke-RestMethod -Method Get -Uri 'http://localhost:8080/audit/security/charts' -Headers $adminHeaders
 $charts.data.events_over_time
 $charts.data.risk_score_trend
 $charts.data.severity_breakdown
 
-$userLogin = Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/auth/login' -ContentType 'application/json' -Body (@{ email = 'user@secureops.com'; password = 'User@12345' } | ConvertTo-Json)
-$userHeaders = @{ Authorization = "Bearer $($userLogin.access_token)" }
 try {
   Invoke-WebRequest -UseBasicParsing -Method Get -Uri 'http://localhost:8080/audit/security/charts' -Headers $userHeaders
 } catch {

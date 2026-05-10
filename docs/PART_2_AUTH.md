@@ -23,6 +23,10 @@ Inventory, orders, files, reports, worker jobs, frontend integration, attack sim
 - `GET /auth/health`
 - `POST /auth/register`
 - `POST /auth/login`
+- `POST /auth/verify-email`
+- `POST /auth/resend-verification`
+- `POST /auth/2fa/verify`
+- `POST /auth/2fa/setup/verify`
 - `POST /auth/logout`
 - `GET /auth/me`
 - `GET /auth/admin-only`
@@ -78,27 +82,36 @@ Invoke-RestMethod `
   -Body $body
 ```
 
-Expected: `201` with user data and no password hash.
+Expected: `201` with `email_verification_required`. New accounts must verify email before login can continue. See `docs/AUTH_2FA_TEST_FLOW.md` for verification commands.
 
 ## Login
 
 ```powershell
-$loginBody = @{
-  email = "user@secureops.com"
-  password = "User@12345"
-} | ConvertTo-Json
-
-$login = Invoke-RestMethod `
+$userLoginStart = Invoke-RestMethod `
   -Method Post `
   -Uri "http://localhost:8080/auth/login" `
   -ContentType "application/json" `
-  -Body $loginBody
+  -Body (@{ email = "user@secureops.com"; password = "User@12345" } | ConvertTo-Json)
 
-$userToken = $login.access_token
-$login
+$userLoginStart
 ```
 
-Expected: `200` with `access_token`, `token_type`, `expires_in`, and user info.
+Expected: `200` with `two_factor_required` or `two_factor_setup_required`. `/auth/login` does not issue a JWT anymore.
+
+Finish 2FA, then save the JWT:
+
+```powershell
+$user2FA = Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://localhost:8080/auth/2fa/verify" `
+  -ContentType "application/json" `
+  -Body (@{ email = "user@secureops.com"; code = "PUT_AUTHENTICATOR_CODE_HERE" } | ConvertTo-Json)
+
+$userToken = $user2FA.data.access_token
+$userHeaders = @{ Authorization = "Bearer $userToken" }
+```
+
+See `docs/AUTH_2FA_TEST_FLOW.md` for the full current auth flow, including email verification.
 
 ## Protected Route Without Token
 
@@ -156,18 +169,21 @@ Expected: `403`.
 ## Admin Allowed On Admin Endpoint
 
 ```powershell
-$adminBody = @{
-  email = "admin@secureops.com"
-  password = "Admin@12345"
-} | ConvertTo-Json
-
-$adminLogin = Invoke-RestMethod `
+$adminLoginStart = Invoke-RestMethod `
   -Method Post `
   -Uri "http://localhost:8080/auth/login" `
   -ContentType "application/json" `
-  -Body $adminBody
+  -Body (@{ email = "admin@secureops.com"; password = "Admin@12345" } | ConvertTo-Json)
 
-$adminToken = $adminLogin.access_token
+$adminLoginStart
+
+$admin2FA = Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://localhost:8080/auth/2fa/verify" `
+  -ContentType "application/json" `
+  -Body (@{ email = "admin@secureops.com"; code = "PUT_AUTHENTICATOR_CODE_HERE" } | ConvertTo-Json)
+
+$adminToken = $admin2FA.data.access_token
 
 Invoke-RestMethod `
   -Method Get `

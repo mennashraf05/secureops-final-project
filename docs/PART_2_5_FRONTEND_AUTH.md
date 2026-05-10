@@ -4,7 +4,7 @@
 
 Part 2.5 connects the existing React, Vite, TypeScript, Tailwind frontend to the completed Auth Service.
 
-- Login now calls `POST /auth/login`
+- Login now starts with `POST /auth/login`, then completes mandatory 2FA before storing the JWT
 - Register now calls `POST /auth/register`
 - App load refreshes the current user with `GET /auth/me`
 - Logout calls `POST /auth/logout` and clears local auth state
@@ -54,20 +54,22 @@ User@12345
 
 1. Open `http://localhost:8080/login`.
 2. Login as admin.
-3. Expected: redirected to `/admin/dashboard`.
-4. Logout from the topbar.
-5. Login as user.
-6. Expected: redirected to `/user/dashboard`.
-7. Try a wrong password.
-8. Expected: safe error message, no route change.
-9. Login successfully and refresh the browser.
-10. Expected: session persists and protected route remains visible.
-11. Logout.
-12. Expected: token is revoked by the backend and local auth state is cleared.
-13. Open `/admin/dashboard` without login.
-14. Expected: redirected to `/login`.
-15. Login as normal user, then open `/admin/dashboard`.
-16. Expected: redirected to `/user/dashboard`.
+3. Complete the mandatory 2FA step.
+4. Expected: redirected to `/admin/dashboard`.
+5. Logout from the topbar.
+6. Login as user.
+7. Complete the mandatory 2FA step.
+8. Expected: redirected to `/user/dashboard`.
+9. Try a wrong password.
+10. Expected: safe error message, no route change.
+11. Login successfully and refresh the browser.
+12. Expected: session persists and protected route remains visible.
+13. Logout.
+14. Expected: token is revoked by the backend and local auth state is cleared.
+15. Open `/admin/dashboard` without login.
+16. Expected: redirected to `/login`.
+17. Login as normal user, then open `/admin/dashboard`.
+18. Expected: redirected to `/user/dashboard`.
 
 ## Storage Note
 

@@ -71,15 +71,43 @@ APP_BASE_URL=http://localhost:8080
 
 ## PowerShell Test Flow
 
+Use `docs/AUTH_2FA_TEST_FLOW.md` as the central source for current token commands. The important response shape is:
+
+- `/auth/login` returns the next auth step and does not return a JWT.
+- `/auth/2fa/verify` returns the JWT at `data.access_token`.
+
 ```powershell
-$registerBody = @{ name = 'Part 9 User'; email = 'part9.user@example.com'; password = 'User@12345' } | ConvertTo-Json
-Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/auth/register' -ContentType 'application/json' -Body $registerBody
+$newEmail = "part9+$(Get-Date -Format yyyyMMddHHmmss)@secureops.com"
 
-$loginBody = @{ email = 'admin@secureops.com'; password = 'Admin@12345' } | ConvertTo-Json
-Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/auth/login' -ContentType 'application/json' -Body $loginBody
+$register = Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/auth/register' `
+  -ContentType 'application/json' `
+  -Body (@{ name = 'Part 9 User'; email = $newEmail; password = 'User@12345' } | ConvertTo-Json)
 
-$verify2faBody = @{ email = 'admin@secureops.com'; code = '<code-from-authenticator-app>' } | ConvertTo-Json
-Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/auth/2fa/verify' -ContentType 'application/json' -Body $verify2faBody
+$register
+
+# Get the email verification code from email, or from logs only when EMAIL_DEV_MODE=true.
+$verifyEmail = Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/auth/verify-email' `
+  -ContentType 'application/json' `
+  -Body (@{ email = $newEmail; code = 'PUT_EMAIL_VERIFICATION_CODE_HERE' } | ConvertTo-Json)
+
+$adminLoginStart = Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/auth/login' `
+  -ContentType 'application/json' `
+  -Body (@{ email = 'admin@secureops.com'; password = 'Admin@12345' } | ConvertTo-Json)
+
+$adminLoginStart
+
+$admin2FA = Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/auth/2fa/verify' `
+  -ContentType 'application/json' `
+  -Body (@{ email = 'admin@secureops.com'; code = 'PUT_AUTHENTICATOR_CODE_HERE' } | ConvertTo-Json)
+
+$adminToken = $admin2FA.data.access_token
+$adminHeaders = @{ Authorization = "Bearer $adminToken" }
+```
+
+When `EMAIL_DEV_MODE=true`, read dev email output with:
+
+```powershell
+docker logs secureops-auth-service --tail 100
 ```
 
 ## Audit Events

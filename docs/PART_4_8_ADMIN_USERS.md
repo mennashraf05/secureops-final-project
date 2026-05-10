@@ -109,23 +109,19 @@ The page shows:
 Admin token should return users:
 
 ```powershell
-$adminLogin = Invoke-RestMethod -Method Post -Uri "http://localhost:8080/auth/login" `
-  -ContentType "application/json" `
-  -Body (@{ email = "admin@secureops.com"; password = "Admin@12345" } | ConvertTo-Json)
+# First create $adminHeaders using docs/AUTH_2FA_TEST_FLOW.md.
 
 Invoke-RestMethod -Method Get -Uri "http://localhost:8080/auth/users" `
-  -Headers @{ Authorization = "Bearer $($adminLogin.access_token)" }
+  -Headers $adminHeaders
 ```
 
 Normal user token should return `403`:
 
 ```powershell
-$userLogin = Invoke-RestMethod -Method Post -Uri "http://localhost:8080/auth/login" `
-  -ContentType "application/json" `
-  -Body (@{ email = "user@secureops.com"; password = "User@12345" } | ConvertTo-Json)
+# First create $userHeaders using docs/AUTH_2FA_TEST_FLOW.md.
 
 Invoke-WebRequest -UseBasicParsing -Method Get -Uri "http://localhost:8080/auth/users" `
-  -Headers @{ Authorization = "Bearer $($userLogin.access_token)" }
+  -Headers $userHeaders
 ```
 
 Missing token should return `401`:

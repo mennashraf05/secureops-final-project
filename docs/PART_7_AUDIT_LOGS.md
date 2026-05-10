@@ -111,8 +111,8 @@ Only backend services with `INTERNAL_API_KEY` can write audit events. Admin user
 $envLines = Get-Content .env
 $internalApiKey = ($envLines | Where-Object { $_ -match '^INTERNAL_API_KEY=' } | Select-Object -First 1) -replace '^INTERNAL_API_KEY=', ''
 
-$adminLogin = Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/auth/login' -ContentType 'application/json' -Body (@{ email = 'admin@secureops.com'; password = 'Admin@12345' } | ConvertTo-Json)
-$adminHeaders = @{ Authorization = "Bearer $($adminLogin.access_token)" }
+# First create $adminHeaders and $userHeaders using docs/AUTH_2FA_TEST_FLOW.md.
+# /auth/login no longer returns access_token directly.
 
 try {
   Invoke-WebRequest -UseBasicParsing -Method Post -Uri 'http://localhost:8080/auth/login' -ContentType 'application/json' -Body (@{ email = 'admin@secureops.com'; password = 'wrong-password' } | ConvertTo-Json)
@@ -122,8 +122,7 @@ try {
 
 Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/auth/logout' -Headers $adminHeaders
 
-$adminLogin = Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/auth/login' -ContentType 'application/json' -Body (@{ email = 'admin@secureops.com'; password = 'Admin@12345' } | ConvertTo-Json)
-$adminHeaders = @{ Authorization = "Bearer $($adminLogin.access_token)" }
+# Recreate $adminHeaders with docs/AUTH_2FA_TEST_FLOW.md after logout.
 
 $productBody = @{
   name = "Audit Demo Part 7"
@@ -134,9 +133,6 @@ $productBody = @{
   quantity = 8
 } | ConvertTo-Json
 $product = Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/products' -ContentType 'application/json' -Headers $adminHeaders -Body $productBody
-
-$userLogin = Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/auth/login' -ContentType 'application/json' -Body (@{ email = 'user@secureops.com'; password = 'User@12345' } | ConvertTo-Json)
-$userHeaders = @{ Authorization = "Bearer $($userLogin.access_token)" }
 
 $orderBody = @{ items = @(@{ product_id = $product.data.id; product_name = $product.data.name; product_sku = $product.data.sku; quantity = 1 }) } | ConvertTo-Json -Depth 5
 $order = Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/orders' -ContentType 'application/json' -Headers $userHeaders -Body $orderBody
