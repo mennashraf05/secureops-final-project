@@ -87,3 +87,7 @@ Part 6.5 connects the Admin Reports page to the Report Service. Admins can creat
 ## Part 6.6 Report Download + Low Stock Report
 
 Part 6.6 adds downloadable report files and implements Low Stock Report generation. Security and Audit report buttons remain disabled until their backend modules are implemented. See `docs/PART_6_6_REPORT_DOWNLOAD_AND_LOW_STOCK.md` for test steps.
+
+## Part 7 Audit Logs
+
+Part 7 implements a real Audit Logs Service. Critical actions from Auth, Inventory, Orders, Reports, and Worker are recorded through an internal API key protected endpoint, and admins can view audit logs securely. See `docs/PART_7_AUDIT_LOGS.md` for backend test steps.

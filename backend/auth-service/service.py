@@ -1,8 +1,6 @@
-import os
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-import requests
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -10,6 +8,7 @@ from sqlalchemy.orm import Session
 from models import ALLOWED_ROLES, RevokedToken, User
 from schemas import AdminCreateUserRequest, LoginRequest, RegisterRequest, TokenResponse, UserResponse
 from security import create_access_token, hash_password, verify_password
+from shared.audit_client import send_audit_event
 
 if TYPE_CHECKING:
     from dependencies import AuthContext
@@ -56,7 +55,13 @@ def create_user_by_admin(db: Session, payload: AdminCreateUserRequest) -> User:
         ) from exc
 
     db.refresh(user)
-    send_audit_event("admin_created_user", user_id=user.id, email=user.email, role=user.role)
+    send_audit_event(
+        "admin.action",
+        "auth-service",
+        "success",
+        user_id=user.id,
+        details={"target_user_id": user.id, "email": user.email, "role": user.role, "operation": "created_user"},
+    )
     return user
 
 
@@ -71,7 +76,13 @@ def delete_user_by_admin(db: Session, user_id: int) -> UserResponse:
     safe_user = UserResponse.model_validate(user)
     db.delete(user)
     db.commit()
-    send_audit_event("admin_deleted_user", user_id=safe_user.id, email=safe_user.email, role=safe_user.role)
+    send_audit_event(
+        "admin.action",
+        "auth-service",
+        "success",
+        user_id=safe_user.id,
+        details={"target_user_id": safe_user.id, "email": safe_user.email, "role": safe_user.role, "operation": "deleted_user"},
+    )
     return safe_user
 
 
@@ -138,20 +149,38 @@ def authenticate_user(db: Session, payload: LoginRequest) -> TokenResponse:
     email = normalize_email(payload.email)
     user = get_user_by_email(db, email)
     if not user or not verify_password(payload.password, user.password_hash):
-        send_audit_event("failed_login", email=email)
+        send_audit_event(
+            "auth.login.failed",
+            "auth-service",
+            "failure",
+            details={"email": email},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
         )
 
     if not user.is_active:
+        send_audit_event(
+            "auth.login.failed",
+            "auth-service",
+            "failure",
+            user_id=user.id,
+            details={"email": email, "reason": "inactive_user"},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
         )
 
     token, _, _, expires_in = create_access_token(user)
-    send_audit_event("successful_login", user_id=user.id, email=user.email)
+    send_audit_event(
+        "auth.login.success",
+        "auth-service",
+        "success",
+        user_id=user.id,
+        details={"email": user.email, "role": user.role},
+    )
     return TokenResponse(access_token=token, expires_in=expires_in, user=UserResponse.model_validate(user))
 
 
@@ -166,7 +195,13 @@ def logout_user(db: Session, context: "AuthContext") -> None:
     )
     db.add(revoked_token)
     db.commit()
-    send_audit_event("logout", user_id=context.user.id, email=context.user.email)
+    send_audit_event(
+        "auth.logout",
+        "auth-service",
+        "success",
+        user_id=context.user.id,
+        details={"email": context.user.email},
+    )
 
 
 def parse_token_expiration(exp: int | float | datetime) -> datetime:
@@ -180,11 +215,3 @@ def parse_token_expiration(exp: int | float | datetime) -> datetime:
 
     return expires_at.astimezone(timezone.utc)
 
-
-def send_audit_event(action: str, **metadata: object) -> None:
-    audit_url = os.getenv("AUDIT_SERVICE_URL", "http://audit-service:8000/audit/events")
-    payload = {"source": "auth-service", "action": action, "metadata": metadata}
-    try:
-        requests.post(audit_url, json=payload, timeout=1.5)
-    except requests.RequestException:
-        return

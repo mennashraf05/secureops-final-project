@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 
 from models import User
 from security import decode_token
-from service import get_user_by_id, is_token_revoked, parse_token_expiration, send_audit_event
+from service import get_user_by_id, is_token_revoked, parse_token_expiration
+from shared.audit_client import send_audit_event
 from shared.database import get_db
 
 
@@ -36,6 +37,7 @@ def get_current_auth_context(
     db: Session = Depends(get_db),
 ) -> AuthContext:
     if credentials is None or credentials.scheme.lower() != "bearer":
+        send_audit_event("auth.unauthorized", "auth-service", "blocked", details={"reason": "missing_bearer_token"})
         raise authentication_error()
 
     token = credentials.credentials
@@ -45,13 +47,16 @@ def get_current_auth_context(
         token_jti = str(payload.get("jti", ""))
         expires_at = parse_token_expiration(payload["exp"])
     except (KeyError, TypeError, ValueError):
+        send_audit_event("auth.unauthorized", "auth-service", "blocked", details={"reason": "invalid_token"})
         raise authentication_error() from None
 
     if not token_jti or is_token_revoked(db, token_jti):
+        send_audit_event("auth.unauthorized", "auth-service", "blocked", user_id=user_id, details={"reason": "revoked_token"})
         raise authentication_error()
 
     user = get_user_by_id(db, user_id)
     if not user or not user.is_active:
+        send_audit_event("auth.unauthorized", "auth-service", "blocked", user_id=user_id, details={"reason": "inactive_or_missing_user"})
         raise authentication_error()
 
     return AuthContext(
@@ -70,10 +75,11 @@ def get_current_user(context: AuthContext = Depends(get_current_auth_context)) -
 def require_admin(context: AuthContext = Depends(get_current_auth_context)) -> User:
     if context.user.role != "admin":
         send_audit_event(
-            "unauthorized_admin_access",
+            "auth.admin.denied",
+            "auth-service",
+            "blocked",
             user_id=context.user.id,
-            email=context.user.email,
-            role=context.user.role,
+            details={"email": context.user.email, "role": context.user.role},
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

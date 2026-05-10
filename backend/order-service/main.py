@@ -1,4 +1,4 @@
-from fastapi import Depends, FastAPI, HTTPException, Query, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -8,6 +8,7 @@ from dependencies import CurrentUserPayload, get_current_user_payload, require_a
 from schemas import OrderCreate, OrderRejectRequest, OrderResponse
 from seed import seed_orders
 from service import approve_order, create_order, get_order_for_user, list_all_orders, list_my_orders, reject_order
+from shared.audit_client import send_audit_event
 from shared.database import Base, SessionLocal, engine, get_db
 from shared.errors import safe_exception_handler, safe_http_exception_handler
 from shared.responses import success_response
@@ -18,6 +19,13 @@ SERVICE_NAME = "order-service"
 app = FastAPI(title="SecureOps Order Service")
 app.add_exception_handler(Exception, safe_exception_handler)
 app.add_exception_handler(HTTPException, safe_http_exception_handler)
+
+
+def client_ip(request: Request) -> str | None:
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.client.host if request.client else None
 
 
 @app.exception_handler(RequestValidationError)
@@ -68,10 +76,19 @@ def gateway_health() -> dict[str, str]:
 @app.post("/orders", status_code=status.HTTP_201_CREATED)
 def create_order_endpoint(
     payload: OrderCreate,
+    request: Request,
     current_user: CurrentUserPayload = Depends(get_current_user_payload),
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
     order = create_order(db=db, payload=payload, current_user=current_user)
+    send_audit_event(
+        "orders.order.created",
+        SERVICE_NAME,
+        "success",
+        user_id=current_user.user_id,
+        ip_address=client_ip(request),
+        details={"order_id": order.id, "items": len(order.items)},
+    )
     return success_response("Order created successfully.", OrderResponse.model_validate(order))
 
 
@@ -117,10 +134,19 @@ def get_order_endpoint(
 @app.patch("/orders/{order_id}/approve")
 def approve_order_endpoint(
     order_id: int,
+    request: Request,
     current_user: CurrentUserPayload = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
     order = approve_order(db=db, order_id=order_id)
+    send_audit_event(
+        "orders.order.approved",
+        SERVICE_NAME,
+        "success",
+        user_id=current_user.user_id,
+        ip_address=client_ip(request),
+        details={"order_id": order.id, "requester_id": order.user_id},
+    )
     return success_response("Order approved successfully.", OrderResponse.model_validate(order))
 
 
@@ -129,8 +155,17 @@ def approve_order_endpoint(
 def reject_order_endpoint(
     order_id: int,
     payload: OrderRejectRequest,
+    request: Request,
     current_user: CurrentUserPayload = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
     order = reject_order(db=db, order_id=order_id, payload=payload)
+    send_audit_event(
+        "orders.order.rejected",
+        SERVICE_NAME,
+        "success",
+        user_id=current_user.user_id,
+        ip_address=client_ip(request),
+        details={"order_id": order.id, "requester_id": order.user_id},
+    )
     return success_response("Order rejected successfully.", OrderResponse.model_validate(order))

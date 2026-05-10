@@ -5,6 +5,7 @@ from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 
+from shared.audit_client import send_audit_event
 from shared.config import settings
 
 
@@ -61,6 +62,13 @@ def require_admin(
     current_user: CurrentUserPayload = Depends(get_current_user_payload),
 ) -> CurrentUserPayload:
     if current_user.role != "admin":
+        send_audit_event(
+            "inventory.admin.denied",
+            "inventory-service",
+            "blocked",
+            user_id=current_user.user_id,
+            details={"email": current_user.email, "role": current_user.role},
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin privileges required.",

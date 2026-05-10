@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from dependencies import CurrentUserPayload
 from models import ORDER_STATUSES, Order, OrderItem
 from schemas import OrderCreate, OrderRejectRequest
+from shared.audit_client import send_audit_event
 from shared.config import settings
 
 
@@ -81,6 +82,13 @@ def get_order_for_update(db: Session, order_id: int) -> Order:
 def get_order_for_user(db: Session, order_id: int, current_user: CurrentUserPayload) -> Order:
     order = get_order(db, order_id)
     if current_user.role != "admin" and order.user_id != current_user.user_id:
+        send_audit_event(
+            "orders.ownership.denied",
+            "order-service",
+            "blocked",
+            user_id=current_user.user_id,
+            details={"order_id": order_id, "owner_user_id": order.user_id},
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only access your own orders.",

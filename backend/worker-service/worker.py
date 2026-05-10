@@ -9,6 +9,7 @@ from sqlalchemy import DateTime, Integer, String, Text, create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 from shared.config import settings
+from shared.audit_client import send_audit_event
 
 
 QUEUE_NAME = "report_jobs"
@@ -155,6 +156,13 @@ def process_report_job(payload: dict[str, Any]) -> None:
         job.error_message = None
         db.add(job)
         db.commit()
+        send_audit_event(
+            "reports.job.processing",
+            "worker-service",
+            "info",
+            user_id=job.requested_by,
+            details={"job_id": job.id, "type": job.type},
+        )
 
         try:
             time.sleep(2)
@@ -169,10 +177,24 @@ def process_report_job(payload: dict[str, Any]) -> None:
             job.completed_at = datetime.now(timezone.utc)
             db.add(job)
             db.commit()
+            send_audit_event(
+                "reports.job.completed",
+                "worker-service",
+                "success",
+                user_id=job.requested_by,
+                details={"job_id": job.id, "type": job.type, "result_path": result_path},
+            )
             print(f"Completed report job {job_id}.", flush=True)
         except Exception as exc:
             db.rollback()
             set_job_failed(db, job_id, "Report generation failed.")
+            send_audit_event(
+                "reports.job.failed",
+                "worker-service",
+                "failure",
+                user_id=job.requested_by,
+                details={"job_id": job_id, "type": job_type},
+            )
             raise RuntimeError(f"Report job {job_id} failed.") from exc
 
 
@@ -192,6 +214,12 @@ def handle_message(
         if job_id is not None:
             with SessionLocal() as db:
                 set_job_failed(db, job_id, "Report generation failed.")
+            send_audit_event(
+                "reports.job.failed",
+                "worker-service",
+                "failure",
+                details={"job_id": job_id},
+            )
     finally:
         channel.basic_ack(delivery_tag=method.delivery_tag)
 

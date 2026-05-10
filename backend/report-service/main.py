@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -9,6 +9,7 @@ from rabbitmq_client import ReportQueueError, publish_report_job
 from schemas import ReportJobActionResponse, ReportJobCreate, ReportJobListResponse, ReportJobResponse
 from seed import seed_report_service
 from service import create_report_job, get_report_job, list_report_jobs, mark_job_failed
+from shared.audit_client import send_audit_event
 from shared.database import Base, SessionLocal, engine, get_db
 from shared.errors import safe_exception_handler, safe_http_exception_handler
 from shared.responses import success_response
@@ -20,6 +21,13 @@ REPORTS_DIR = Path("/app/reports")
 app = FastAPI(title="SecureOps Report Service")
 app.add_exception_handler(Exception, safe_exception_handler)
 app.add_exception_handler(HTTPException, safe_http_exception_handler)
+
+
+def client_ip(request: Request) -> str | None:
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.client.host if request.client else None
 
 
 def health_response() -> dict[str, str]:
@@ -48,6 +56,7 @@ def gateway_health() -> dict[str, str]:
 
 @app.post("/reports/inventory", response_model=ReportJobActionResponse, status_code=201)
 def request_inventory_report(
+    request: Request,
     current_user: CurrentUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
@@ -60,16 +69,33 @@ def request_inventory_report(
         publish_report_job(job)
     except ReportQueueError as exc:
         mark_job_failed(db, job, "Report queue is unavailable.")
+        send_audit_event(
+            "reports.job.failed",
+            SERVICE_NAME,
+            "failure",
+            user_id=current_user.id,
+            ip_address=client_ip(request),
+            details={"job_id": job.id, "type": job.type, "reason": "queue_unavailable"},
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Could not queue report job.",
         ) from exc
 
+    send_audit_event(
+        "reports.job.created",
+        SERVICE_NAME,
+        "success",
+        user_id=current_user.id,
+        ip_address=client_ip(request),
+        details={"job_id": job.id, "type": job.type},
+    )
     return success_response("Inventory report job created successfully.", ReportJobResponse.model_validate(job))
 
 
 @app.post("/reports/low-stock", response_model=ReportJobActionResponse, status_code=201)
 def request_low_stock_report(
+    request: Request,
     current_user: CurrentUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
@@ -82,11 +108,27 @@ def request_low_stock_report(
         publish_report_job(job)
     except ReportQueueError as exc:
         mark_job_failed(db, job, "Report queue is unavailable.")
+        send_audit_event(
+            "reports.job.failed",
+            SERVICE_NAME,
+            "failure",
+            user_id=current_user.id,
+            ip_address=client_ip(request),
+            details={"job_id": job.id, "type": job.type, "reason": "queue_unavailable"},
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Could not queue report job.",
         ) from exc
 
+    send_audit_event(
+        "reports.job.created",
+        SERVICE_NAME,
+        "success",
+        user_id=current_user.id,
+        ip_address=client_ip(request),
+        details={"job_id": job.id, "type": job.type},
+    )
     return success_response("Low stock report job created successfully.", ReportJobResponse.model_validate(job))
 
 

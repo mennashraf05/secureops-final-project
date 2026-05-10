@@ -1,4 +1,4 @@
-from fastapi import Depends, FastAPI, HTTPException, Query, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -15,6 +15,7 @@ from service import (
     update_product,
     update_product_stock,
 )
+from shared.audit_client import send_audit_event
 from shared.database import Base, SessionLocal, engine, get_db
 from shared.errors import safe_exception_handler, safe_http_exception_handler
 from shared.responses import success_response
@@ -25,6 +26,13 @@ SERVICE_NAME = "inventory-service"
 app = FastAPI(title="SecureOps Inventory Service")
 app.add_exception_handler(Exception, safe_exception_handler)
 app.add_exception_handler(HTTPException, safe_http_exception_handler)
+
+
+def client_ip(request: Request) -> str | None:
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.client.host if request.client else None
 
 
 @app.exception_handler(RequestValidationError)
@@ -66,10 +74,19 @@ def gateway_health() -> dict[str, str]:
 @app.post("/products", status_code=status.HTTP_201_CREATED)
 def create_product_endpoint(
     payload: ProductCreate,
+    request: Request,
     current_user: CurrentUserPayload = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
     product = create_product(db=db, payload=payload, created_by=current_user.user_id)
+    send_audit_event(
+        "inventory.product.created",
+        SERVICE_NAME,
+        "success",
+        user_id=current_user.user_id,
+        ip_address=client_ip(request),
+        details={"product_id": product.id, "sku": product.sku, "name": product.name},
+    )
     return success_response("Product created successfully.", ProductResponse.model_validate(product))
 
 
@@ -100,7 +117,22 @@ def deduct_stock_endpoint(
     internal_auth: None = Depends(require_internal_api_key),
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
-    products = deduct_product_stock(db=db, payload=payload)
+    try:
+        products = deduct_product_stock(db=db, payload=payload)
+    except Exception:
+        send_audit_event(
+            "inventory.stock.deduct.failed",
+            SERVICE_NAME,
+            "failure",
+            details={"items": [item.model_dump() for item in payload.items]},
+        )
+        raise
+    send_audit_event(
+        "inventory.stock.deducted",
+        SERVICE_NAME,
+        "success",
+        details={"product_ids": [product.id for product in products]},
+    )
     return success_response(
         "Product stock deducted successfully.",
         [ProductResponse.model_validate(product) for product in products],
@@ -121,10 +153,19 @@ def get_product_endpoint(
 def update_product_endpoint(
     product_id: int,
     payload: ProductUpdate,
+    request: Request,
     current_user: CurrentUserPayload = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
     product = update_product(db=db, product_id=product_id, payload=payload)
+    send_audit_event(
+        "inventory.product.updated",
+        SERVICE_NAME,
+        "success",
+        user_id=current_user.user_id,
+        ip_address=client_ip(request),
+        details={"product_id": product.id, "sku": product.sku},
+    )
     return success_response("Product updated successfully.", ProductResponse.model_validate(product))
 
 
@@ -132,18 +173,36 @@ def update_product_endpoint(
 def update_stock_endpoint(
     product_id: int,
     payload: StockUpdate,
+    request: Request,
     current_user: CurrentUserPayload = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
     product = update_product_stock(db=db, product_id=product_id, payload=payload)
+    send_audit_event(
+        "inventory.stock.updated",
+        SERVICE_NAME,
+        "success",
+        user_id=current_user.user_id,
+        ip_address=client_ip(request),
+        details={"product_id": product.id, "sku": product.sku, "quantity": product.quantity},
+    )
     return success_response("Product stock updated successfully.", ProductResponse.model_validate(product))
 
 
 @app.delete("/products/{product_id}")
 def delete_product_endpoint(
     product_id: int,
+    request: Request,
     current_user: CurrentUserPayload = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
     delete_product(db=db, product_id=product_id)
+    send_audit_event(
+        "inventory.product.deleted",
+        SERVICE_NAME,
+        "success",
+        user_id=current_user.user_id,
+        ip_address=client_ip(request),
+        details={"product_id": product_id},
+    )
     return success_response("Product deleted successfully.")
