@@ -75,3 +75,11 @@ Part 4.7 improves the Admin Orders page by showing user information instead of o
 ## Part 4.8 Admin Users
 
 Part 4.8 adds an admin-only Users page and Auth Service endpoints for viewing, creating, and deleting registered users safely without exposing password hashes. See `docs/PART_4_8_ADMIN_USERS.md` for details.
+
+## Part 6 Reports + RabbitMQ + Worker
+
+Part 6 implements asynchronous report generation using the Report Service, RabbitMQ, Worker Service, and PostgreSQL job tracking. Admins can create inventory report jobs, RabbitMQ queues the jobs, and the Worker Service consumes them and marks jobs as completed. See `docs/PART_6_REPORTS_RABBITMQ_WORKER.md` for endpoints, worker behavior, and PowerShell test commands.
+
+## Part 6.5 Frontend Reports
+
+Part 6.5 connects the Admin Reports page to the Report Service. Admins can create inventory report jobs, view job statuses, refresh results, and confirm worker completion from the UI. See `docs/PART_6_5_FRONTEND_REPORTS.md` for browser test steps.
