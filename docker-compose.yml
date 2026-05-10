@@ -102,6 +102,7 @@ services:
       - "8000"
     depends_on:
       - postgres
+      - rabbitmq
     networks:
       - secureops-network
 
@@ -127,7 +128,10 @@ services:
     env_file:
       - .env
     depends_on:
+      - postgres
       - rabbitmq
+    volumes:
+      - worker-reports:/app/reports
     networks:
       - secureops-network
 
@@ -138,8 +142,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    ports:
-      - "5433:5432"
+   
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
@@ -169,3 +172,4 @@ volumes:
   rabbitmq-data:
   file-storage:
   frontend-node-modules:
+  worker-reports:

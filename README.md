@@ -71,3 +71,7 @@ Part 4.6 adds automatic stock deduction when an admin approves an order. Stock i
 ## Part 4.7 Admin Order User Info
 
 Part 4.7 improves the Admin Orders page by showing user information instead of only numeric user IDs. Orders now store user snapshot fields such as `user_name` and `user_email`, with fallback handling for older orders. See `docs/PART_4_7_ADMIN_ORDER_USER_INFO.md` for details.
+
+## Part 4.8 Admin Users
+
+Part 4.8 adds an admin-only Users page and Auth Service endpoints for viewing, creating, and deleting registered users safely without exposing password hashes. See `docs/PART_4_8_ADMIN_USERS.md` for details.
