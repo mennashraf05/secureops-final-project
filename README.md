@@ -91,3 +91,7 @@ Part 6.6 adds downloadable report files and implements Low Stock Report generati
 ## Part 7 Audit Logs
 
 Part 7 implements a real Audit Logs Service. Critical actions from Auth, Inventory, Orders, Reports, and Worker are recorded through an internal API key protected endpoint, and admins can view audit logs securely. See `docs/PART_7_AUDIT_LOGS.md` for backend test steps.
+
+## Part 7.5 Frontend Audit Logs
+
+Part 7.5 connects the Admin Audit Logs page to the Audit Service. Admins can view centralized audit events from Auth, Inventory, Orders, Reports, and Worker with filters for service, status, action, user, and limit. See `docs/PART_7_5_FRONTEND_AUDIT_LOGS.md` for browser test steps.
