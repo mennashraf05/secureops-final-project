@@ -4,7 +4,16 @@ from sqlalchemy.orm import Session
 from dependencies import CurrentUser, require_admin, require_internal_api_key
 from schemas import AuditLogActionResponse, AuditLogCreate, AuditLogListResponse, AuditLogResponse
 from seed import seed_audit_service
-from service import create_audit_log, get_audit_log, list_audit_logs
+from service import (
+    create_audit_log,
+    get_audit_log,
+    list_audit_logs,
+    monitoring_summary,
+    security_charts,
+    security_overview,
+    user_risk_details,
+    user_risk_scores,
+)
 from shared.database import Base, SessionLocal, engine, get_db
 from shared.errors import safe_exception_handler, safe_http_exception_handler
 from shared.responses import success_response
@@ -88,3 +97,52 @@ def log(
 ) -> dict[str, object]:
     audit_log = get_audit_log(db=db, log_id=log_id)
     return success_response("Audit log retrieved successfully.", AuditLogResponse.model_validate(audit_log))
+
+
+@app.get("/audit/monitoring/summary")
+def monitoring_summary_endpoint(
+    current_user: CurrentUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    return success_response("Monitoring summary retrieved successfully.", monitoring_summary(db))
+
+
+@app.get("/audit/security/overview")
+def security_overview_endpoint(
+    current_user: CurrentUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    return success_response("Security overview retrieved successfully.", security_overview(db))
+
+
+@app.get("/audit/security/charts")
+def security_charts_endpoint(
+    current_user: CurrentUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    return success_response("Security chart data retrieved successfully.", security_charts(db))
+
+
+@app.get("/audit/security/user-risk")
+def user_risk_scores_endpoint(
+    limit: int = Query(default=20, ge=1, le=100),
+    risk_level: str | None = Query(default=None),
+    current_user: CurrentUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    return success_response(
+        "User risk scores retrieved successfully.",
+        user_risk_scores(db, limit=limit, risk_level_filter=risk_level),
+    )
+
+
+@app.get("/audit/security/user-risk/{user_id}")
+def user_risk_details_endpoint(
+    user_id: str,
+    current_user: CurrentUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    return success_response(
+        "User risk details retrieved successfully.",
+        user_risk_details(db, user_id),
+    )

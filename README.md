@@ -95,3 +95,15 @@ Part 7 implements a real Audit Logs Service. Critical actions from Auth, Invento
 ## Part 7.5 Frontend Audit Logs
 
 Part 7.5 connects the Admin Audit Logs page to the Audit Service. Admins can view centralized audit events from Auth, Inventory, Orders, Reports, and Worker with filters for service, status, action, user, and limit. See `docs/PART_7_5_FRONTEND_AUDIT_LOGS.md` for browser test steps.
+
+## Part 8 Monitoring Dashboard + Security Center
+
+Part 8 connects monitoring and security dashboards to real backend data from audit logs, users, products, orders, and report jobs. It calculates a risk score, derives security alerts, and displays real security events for admins. See `docs/PART_8_MONITORING_SECURITY_CENTER.md` for test steps.
+
+## Part 8.5 Real Security Charts
+
+Part 8.5 connects the Security Center charts to real audit-log-derived backend data, including events over time, risk score trends, severity breakdown, and status distribution. See `docs/PART_8_5_REAL_SECURITY_CHARTS.md` for test steps.
+
+## Part 8.6 Per-User Risk Score
+
+Part 8.6 adds per-user risk scoring derived from audit logs so admins can identify users or system actors associated with suspicious activity. See `docs/PART_8_6_PER_USER_RISK_SCORE.md` for test steps.
