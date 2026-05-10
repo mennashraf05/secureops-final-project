@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -10,6 +10,7 @@ from security import decode_token
 from service import get_user_by_id, is_token_revoked, parse_token_expiration
 from shared.audit_client import send_audit_event
 from shared.database import get_db
+from shared.request_utils import get_client_ip
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -22,6 +23,7 @@ class AuthContext:
     token_jti: str
     expires_at: datetime
     payload: dict
+    ip_address: str | None
 
 
 def authentication_error() -> HTTPException:
@@ -33,11 +35,13 @@ def authentication_error() -> HTTPException:
 
 
 def get_current_auth_context(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> AuthContext:
+    ip_address = get_client_ip(request)
     if credentials is None or credentials.scheme.lower() != "bearer":
-        send_audit_event("auth.unauthorized", "auth-service", "blocked", details={"reason": "missing_bearer_token"})
+        send_audit_event("auth.unauthorized", "auth-service", "blocked", ip_address=ip_address, details={"reason": "missing_bearer_token"})
         raise authentication_error()
 
     token = credentials.credentials
@@ -47,16 +51,16 @@ def get_current_auth_context(
         token_jti = str(payload.get("jti", ""))
         expires_at = parse_token_expiration(payload["exp"])
     except (KeyError, TypeError, ValueError):
-        send_audit_event("auth.unauthorized", "auth-service", "blocked", details={"reason": "invalid_token"})
+        send_audit_event("auth.unauthorized", "auth-service", "blocked", ip_address=ip_address, details={"reason": "invalid_token"})
         raise authentication_error() from None
 
     if not token_jti or is_token_revoked(db, token_jti):
-        send_audit_event("auth.unauthorized", "auth-service", "blocked", user_id=user_id, details={"reason": "revoked_token"})
+        send_audit_event("auth.unauthorized", "auth-service", "blocked", user_id=user_id, ip_address=ip_address, details={"reason": "revoked_token"})
         raise authentication_error()
 
     user = get_user_by_id(db, user_id)
     if not user or not user.is_active:
-        send_audit_event("auth.unauthorized", "auth-service", "blocked", user_id=user_id, details={"reason": "inactive_or_missing_user"})
+        send_audit_event("auth.unauthorized", "auth-service", "blocked", user_id=user_id, ip_address=ip_address, details={"reason": "inactive_or_missing_user"})
         raise authentication_error()
 
     return AuthContext(
@@ -65,6 +69,7 @@ def get_current_auth_context(
         token_jti=token_jti,
         expires_at=expires_at,
         payload=payload,
+        ip_address=ip_address,
     )
 
 
@@ -79,6 +84,7 @@ def require_admin(context: AuthContext = Depends(get_current_auth_context)) -> U
             "auth-service",
             "blocked",
             user_id=context.user.id,
+            ip_address=context.ip_address,
             details={"email": context.user.email, "role": context.user.role},
         )
         raise HTTPException(

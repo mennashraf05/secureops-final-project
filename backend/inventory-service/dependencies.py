@@ -1,12 +1,13 @@
 from dataclasses import dataclass
 from secrets import compare_digest
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 
 from shared.audit_client import send_audit_event
 from shared.config import settings
+from shared.request_utils import get_client_ip
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -59,6 +60,7 @@ def get_current_user_payload(
 
 
 def require_admin(
+    request: Request,
     current_user: CurrentUserPayload = Depends(get_current_user_payload),
 ) -> CurrentUserPayload:
     if current_user.role != "admin":
@@ -67,6 +69,7 @@ def require_admin(
             "inventory-service",
             "blocked",
             user_id=current_user.user_id,
+            ip_address=get_client_ip(request),
             details={"email": current_user.email, "role": current_user.role},
         )
         raise HTTPException(

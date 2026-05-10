@@ -18,6 +18,7 @@ from service import (
 from shared.audit_client import send_audit_event
 from shared.database import Base, SessionLocal, engine, get_db
 from shared.errors import safe_exception_handler, safe_http_exception_handler
+from shared.request_utils import get_client_ip
 from shared.responses import success_response
 
 
@@ -26,13 +27,6 @@ SERVICE_NAME = "inventory-service"
 app = FastAPI(title="SecureOps Inventory Service")
 app.add_exception_handler(Exception, safe_exception_handler)
 app.add_exception_handler(HTTPException, safe_http_exception_handler)
-
-
-def client_ip(request: Request) -> str | None:
-    forwarded_for = request.headers.get("x-forwarded-for")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
-    return request.client.host if request.client else None
 
 
 @app.exception_handler(RequestValidationError)
@@ -84,7 +78,7 @@ def create_product_endpoint(
         SERVICE_NAME,
         "success",
         user_id=current_user.user_id,
-        ip_address=client_ip(request),
+        ip_address=get_client_ip(request),
         details={"product_id": product.id, "sku": product.sku, "name": product.name},
     )
     return success_response("Product created successfully.", ProductResponse.model_validate(product))
@@ -163,7 +157,7 @@ def update_product_endpoint(
         SERVICE_NAME,
         "success",
         user_id=current_user.user_id,
-        ip_address=client_ip(request),
+        ip_address=get_client_ip(request),
         details={"product_id": product.id, "sku": product.sku},
     )
     return success_response("Product updated successfully.", ProductResponse.model_validate(product))
@@ -183,7 +177,7 @@ def update_stock_endpoint(
         SERVICE_NAME,
         "success",
         user_id=current_user.user_id,
-        ip_address=client_ip(request),
+        ip_address=get_client_ip(request),
         details={"product_id": product.id, "sku": product.sku, "quantity": product.quantity},
     )
     return success_response("Product stock updated successfully.", ProductResponse.model_validate(product))
@@ -202,7 +196,7 @@ def delete_product_endpoint(
         SERVICE_NAME,
         "success",
         user_id=current_user.user_id,
-        ip_address=client_ip(request),
+        ip_address=get_client_ip(request),
         details={"product_id": product_id},
     )
     return success_response("Product deleted successfully.")

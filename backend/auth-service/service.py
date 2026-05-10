@@ -145,7 +145,7 @@ def create_user_if_missing(
     return user
 
 
-def authenticate_user(db: Session, payload: LoginRequest) -> TokenResponse:
+def authenticate_user(db: Session, payload: LoginRequest, ip_address: str | None = None) -> TokenResponse:
     email = normalize_email(payload.email)
     user = get_user_by_email(db, email)
     if not user or not verify_password(payload.password, user.password_hash):
@@ -153,6 +153,7 @@ def authenticate_user(db: Session, payload: LoginRequest) -> TokenResponse:
             "auth.login.failed",
             "auth-service",
             "failure",
+            ip_address=ip_address,
             details={"email": email},
         )
         raise HTTPException(
@@ -166,6 +167,7 @@ def authenticate_user(db: Session, payload: LoginRequest) -> TokenResponse:
             "auth-service",
             "failure",
             user_id=user.id,
+            ip_address=ip_address,
             details={"email": email, "reason": "inactive_user"},
         )
         raise HTTPException(
@@ -179,6 +181,7 @@ def authenticate_user(db: Session, payload: LoginRequest) -> TokenResponse:
         "auth-service",
         "success",
         user_id=user.id,
+        ip_address=ip_address,
         details={"email": user.email, "role": user.role},
     )
     return TokenResponse(access_token=token, expires_in=expires_in, user=UserResponse.model_validate(user))
@@ -200,6 +203,7 @@ def logout_user(db: Session, context: "AuthContext") -> None:
         "auth-service",
         "success",
         user_id=context.user.id,
+        ip_address=context.ip_address,
         details={"email": context.user.email},
     )
 
@@ -214,4 +218,3 @@ def parse_token_expiration(exp: int | float | datetime) -> datetime:
         return expires_at.replace(tzinfo=timezone.utc)
 
     return expires_at.astimezone(timezone.utc)
-

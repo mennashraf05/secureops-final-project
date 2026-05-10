@@ -11,6 +11,7 @@ from service import approve_order, create_order, get_order_for_user, list_all_or
 from shared.audit_client import send_audit_event
 from shared.database import Base, SessionLocal, engine, get_db
 from shared.errors import safe_exception_handler, safe_http_exception_handler
+from shared.request_utils import get_client_ip
 from shared.responses import success_response
 
 
@@ -19,13 +20,6 @@ SERVICE_NAME = "order-service"
 app = FastAPI(title="SecureOps Order Service")
 app.add_exception_handler(Exception, safe_exception_handler)
 app.add_exception_handler(HTTPException, safe_http_exception_handler)
-
-
-def client_ip(request: Request) -> str | None:
-    forwarded_for = request.headers.get("x-forwarded-for")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
-    return request.client.host if request.client else None
 
 
 @app.exception_handler(RequestValidationError)
@@ -86,7 +80,7 @@ def create_order_endpoint(
         SERVICE_NAME,
         "success",
         user_id=current_user.user_id,
-        ip_address=client_ip(request),
+        ip_address=get_client_ip(request),
         details={"order_id": order.id, "items": len(order.items)},
     )
     return success_response("Order created successfully.", OrderResponse.model_validate(order))
@@ -144,7 +138,7 @@ def approve_order_endpoint(
         SERVICE_NAME,
         "success",
         user_id=current_user.user_id,
-        ip_address=client_ip(request),
+        ip_address=get_client_ip(request),
         details={"order_id": order.id, "requester_id": order.user_id},
     )
     return success_response("Order approved successfully.", OrderResponse.model_validate(order))
@@ -165,7 +159,7 @@ def reject_order_endpoint(
         SERVICE_NAME,
         "success",
         user_id=current_user.user_id,
-        ip_address=client_ip(request),
+        ip_address=get_client_ip(request),
         details={"order_id": order.id, "requester_id": order.user_id},
     )
     return success_response("Order rejected successfully.", OrderResponse.model_validate(order))

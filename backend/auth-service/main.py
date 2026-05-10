@@ -1,4 +1,4 @@
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from dependencies import AuthContext, get_current_auth_context, get_current_user, require_admin
@@ -7,6 +7,7 @@ from seed import seed_default_users
 from service import authenticate_user, create_user_by_admin, delete_user_by_admin, list_users, logout_user, register_user
 from shared.database import Base, SessionLocal, engine, get_db
 from shared.errors import safe_exception_handler, safe_http_exception_handler
+from shared.request_utils import get_client_ip
 from shared.responses import success_response
 
 
@@ -47,8 +48,8 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> UserRes
 
 
 @app.post("/auth/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
-    return authenticate_user(db=db, payload=payload)
+def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)) -> TokenResponse:
+    return authenticate_user(db=db, payload=payload, ip_address=get_client_ip(request))
 
 
 @app.post("/auth/logout")

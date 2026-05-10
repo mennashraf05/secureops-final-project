@@ -12,6 +12,7 @@ from service import create_report_job, get_report_job, list_report_jobs, mark_jo
 from shared.audit_client import send_audit_event
 from shared.database import Base, SessionLocal, engine, get_db
 from shared.errors import safe_exception_handler, safe_http_exception_handler
+from shared.request_utils import get_client_ip
 from shared.responses import success_response
 
 
@@ -21,13 +22,6 @@ REPORTS_DIR = Path("/app/reports")
 app = FastAPI(title="SecureOps Report Service")
 app.add_exception_handler(Exception, safe_exception_handler)
 app.add_exception_handler(HTTPException, safe_http_exception_handler)
-
-
-def client_ip(request: Request) -> str | None:
-    forwarded_for = request.headers.get("x-forwarded-for")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
-    return request.client.host if request.client else None
 
 
 def health_response() -> dict[str, str]:
@@ -74,7 +68,7 @@ def request_inventory_report(
             SERVICE_NAME,
             "failure",
             user_id=current_user.id,
-            ip_address=client_ip(request),
+            ip_address=get_client_ip(request),
             details={"job_id": job.id, "type": job.type, "reason": "queue_unavailable"},
         )
         raise HTTPException(
@@ -87,7 +81,7 @@ def request_inventory_report(
         SERVICE_NAME,
         "success",
         user_id=current_user.id,
-        ip_address=client_ip(request),
+        ip_address=get_client_ip(request),
         details={"job_id": job.id, "type": job.type},
     )
     return success_response("Inventory report job created successfully.", ReportJobResponse.model_validate(job))
@@ -113,7 +107,7 @@ def request_low_stock_report(
             SERVICE_NAME,
             "failure",
             user_id=current_user.id,
-            ip_address=client_ip(request),
+            ip_address=get_client_ip(request),
             details={"job_id": job.id, "type": job.type, "reason": "queue_unavailable"},
         )
         raise HTTPException(
@@ -126,7 +120,7 @@ def request_low_stock_report(
         SERVICE_NAME,
         "success",
         user_id=current_user.id,
-        ip_address=client_ip(request),
+        ip_address=get_client_ip(request),
         details={"job_id": job.id, "type": job.type},
     )
     return success_response("Low stock report job created successfully.", ReportJobResponse.model_validate(job))

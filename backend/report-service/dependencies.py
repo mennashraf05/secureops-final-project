@@ -1,11 +1,12 @@
 from dataclasses import dataclass
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 
 from shared.audit_client import send_audit_event
 from shared.config import settings
+from shared.request_utils import get_client_ip
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -49,13 +50,17 @@ def get_current_user(
     return CurrentUser(id=user_id, role=role, payload=payload)
 
 
-def require_admin(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+def require_admin(
+    request: Request,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> CurrentUser:
     if current_user.role != "admin":
         send_audit_event(
             "reports.admin.denied",
             "report-service",
             "blocked",
             user_id=current_user.id,
+            ip_address=get_client_ip(request),
             details={"role": current_user.role},
         )
         raise HTTPException(

@@ -96,7 +96,7 @@ export default function AuditLogs() {
     log.service_name,
     log.action,
     userId(log.user_id),
-    log.ip_address || 'Not captured',
+    log.ip_address || (log.service_name === 'worker-service' ? 'Internal' : 'Not captured'),
     <Badge tone={statusTone(log.status)}>{log.status}</Badge>,
     detailsPreview(log.details),
   ]), [logs]);
