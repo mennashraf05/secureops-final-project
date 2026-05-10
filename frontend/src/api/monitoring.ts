@@ -38,3 +38,11 @@ export async function getUserRiskDetails(userId: number | 'system') {
   const response = await request<ApiResponse<UserRiskDetails>>(`/audit/security/user-risk/${userId}`);
   return unwrap(response);
 }
+
+export async function dismissSecurityAlert(auditLogId: number, reason = 'Reviewed by admin') {
+  const response = await request<ApiResponse<unknown>>(`/audit/security/alerts/${auditLogId}/dismiss`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+  return unwrap(response);
+}

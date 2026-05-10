@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getAuditLogs } from '../../api/audit';
+import { Trash2 } from 'lucide-react';
+import { deleteAuditLog, getAuditLogs } from '../../api/audit';
 import { useAuth } from '../../auth/AuthContext';
 import { PageHeader } from '../../components/layout/Page';
 import { KpiCard } from '../../components/cards/KpiCard';
@@ -53,11 +54,14 @@ export default function AuditLogs() {
   const [userFilter, setUserFilter] = useState('');
   const [limit, setLimit] = useState(50);
   const [isLoading, setIsLoading] = useState(true);
+  const [deletingLogId, setDeletingLogId] = useState<number | null>(null);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   async function loadLogs() {
     setIsLoading(true);
     setError('');
+    setSuccess('');
     try {
       const userIdFilter = Number(userFilter);
       setLogs(await getAuditLogs({
@@ -75,6 +79,27 @@ export default function AuditLogs() {
       setError(nextError);
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function handleDelete(log: AuditLog) {
+    if (!window.confirm(`Delete audit log #${log.id}?`)) return;
+
+    setDeletingLogId(log.id);
+    setError('');
+    setSuccess('');
+    try {
+      await deleteAuditLog(log.id);
+      setLogs((current) => current.filter((item) => item.id !== log.id));
+      setSuccess(`Audit log #${log.id} deleted successfully.`);
+    } catch (err) {
+      const nextError = err instanceof Error ? err.message : 'Could not delete audit log.';
+      if (nextError === 'Invalid or expired token.') {
+        await logoutUser();
+      }
+      setError(nextError);
+    } finally {
+      setDeletingLogId(null);
     }
   }
 
@@ -99,7 +124,10 @@ export default function AuditLogs() {
     log.ip_address || (log.service_name === 'worker-service' ? 'Internal' : 'Not captured'),
     <Badge tone={statusTone(log.status)}>{log.status}</Badge>,
     detailsPreview(log.details),
-  ]), [logs]);
+    <Button variant="danger" className="inline-flex items-center gap-2 px-3 py-2 text-xs" onClick={() => void handleDelete(log)} disabled={deletingLogId === log.id}>
+      <Trash2 size={14}/>{deletingLogId === log.id ? 'Deleting...' : 'Delete'}
+    </Button>,
+  ]), [deletingLogId, logs]);
 
   return <>
     <PageHeader title="Audit Logs" subtitle="Search, filter, and review critical system and security activity."/>
@@ -132,9 +160,10 @@ export default function AuditLogs() {
     <section className="mt-7">
       <SectionCard title="Audit Logs Table" subtitle="Centralized security and business events from backend services.">
         {error && <div className="mb-5 rounded-2xl bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</div>}
+        {success && <div className="mb-5 rounded-2xl bg-green-50 p-4 text-sm font-semibold text-green-700">{success}</div>}
         {isLoading ? <p className="text-sm font-semibold text-slate-500">Loading audit logs...</p> : null}
         {!isLoading && !error && logs.length === 0 ? <p className="text-sm font-semibold text-slate-500">No audit logs match these filters.</p> : null}
-        {!isLoading && logs.length > 0 ? <DataTable columns={['Log ID','Time','Service','Action','User ID','IP Address','Status','Details']} rows={rows}/> : null}
+        {!isLoading && logs.length > 0 ? <DataTable columns={['Log ID','Time','Service','Action','User ID','IP Address','Status','Details','Actions']} rows={rows}/> : null}
       </SectionCard>
     </section>
   </>;

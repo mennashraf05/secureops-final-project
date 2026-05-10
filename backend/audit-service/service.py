@@ -1,11 +1,12 @@
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+import json
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
-from models import ALLOWED_AUDIT_STATUSES, AuditLog
+from models import ALLOWED_AUDIT_STATUSES, AuditLog, DismissedSecurityAlert
 from schemas import AuditLogCreate
 
 
@@ -13,6 +14,7 @@ SECURITY_ACTIONS = {
     "auth.login.failed",
     "auth.unauthorized",
     "auth.admin.denied",
+    "audit.admin.denied",
     "inventory.admin.denied",
     "orders.admin.denied",
     "orders.ownership.denied",
@@ -27,6 +29,7 @@ RISK_IMPACTS = {
     "auth.login.failed": 5,
     "auth.unauthorized": 10,
     "auth.admin.denied": 15,
+    "audit.admin.denied": 15,
     "inventory.admin.denied": 15,
     "orders.admin.denied": 15,
     "orders.ownership.denied": 20,
@@ -41,6 +44,7 @@ ALERT_TITLES = {
     "auth.login.failed": "Failed login detected",
     "auth.unauthorized": "Unauthorized access attempt",
     "auth.admin.denied": "Admin endpoint denied",
+    "audit.admin.denied": "Admin endpoint denied",
     "inventory.admin.denied": "Admin endpoint denied",
     "orders.admin.denied": "Admin endpoint denied",
     "reports.admin.denied": "Admin endpoint denied",
@@ -109,6 +113,67 @@ def get_audit_log(db: Session, log_id: int) -> AuditLog:
             detail="Audit log not found.",
         )
     return log
+
+
+def delete_audit_log(db: Session, log_id: int) -> None:
+    log = get_audit_log(db=db, log_id=log_id)
+    db.query(DismissedSecurityAlert).filter(
+        DismissedSecurityAlert.audit_log_id == log_id
+    ).delete(synchronize_session=False)
+    db.delete(log)
+    db.commit()
+
+
+def dismissed_alert_ids(db: Session) -> set[int]:
+    rows = db.query(DismissedSecurityAlert.audit_log_id).all()
+    return {int(row[0]) for row in rows}
+
+
+def exclude_dismissed(logs: list[AuditLog], dismissed_ids: set[int]) -> list[AuditLog]:
+    if not dismissed_ids:
+        return logs
+    return [log for log in logs if log.id not in dismissed_ids]
+
+
+def dismiss_security_alert(
+    db: Session,
+    *,
+    audit_log_id: int,
+    dismissed_by: int | None,
+    reason: str | None = None,
+) -> DismissedSecurityAlert:
+    get_audit_log(db=db, log_id=audit_log_id)
+    clean_reason = reason.strip() if reason else None
+
+    existing = (
+        db.query(DismissedSecurityAlert)
+        .filter(DismissedSecurityAlert.audit_log_id == audit_log_id)
+        .first()
+    )
+    if existing:
+        return existing
+
+    dismissed = DismissedSecurityAlert(
+        audit_log_id=audit_log_id,
+        dismissed_by=dismissed_by,
+        reason=clean_reason,
+    )
+    db.add(dismissed)
+    db.flush()
+
+    audit_event = AuditLogCreate(
+        user_id=dismissed_by,
+        action="security.alert.dismissed",
+        service_name="audit-service",
+        status="success",
+        details=json.dumps({
+            "dismissed_audit_log_id": audit_log_id,
+            "reason": clean_reason,
+        }),
+    )
+    create_audit_log(db=db, payload=audit_event)
+    db.refresh(dismissed)
+    return dismissed
 
 
 def risk_level(score: int) -> str:
@@ -244,6 +309,7 @@ def severity_for_log(log: AuditLog) -> str:
 def alert_from_log(log: AuditLog) -> dict[str, object]:
     return {
         "id": log.id,
+        "audit_log_id": log.id,
         "title": ALERT_TITLES.get(log.action, "Security event detected"),
         "severity": alert_severity(log),
         "source_service": log.service_name,
@@ -256,7 +322,8 @@ def alert_from_log(log: AuditLog) -> dict[str, object]:
 
 
 def monitoring_summary(db: Session) -> dict[str, object]:
-    security_logs = recent_security_logs(db)
+    dismissed_ids = dismissed_alert_ids(db)
+    security_logs = exclude_dismissed(recent_security_logs(db), dismissed_ids)
     score, level, _ = calculate_risk_from_logs(security_logs)
 
     return {
@@ -270,14 +337,9 @@ def monitoring_summary(db: Session) -> dict[str, object]:
         "completed_report_jobs": table_count(db, "jobs", "status = 'completed'"),
         "failed_report_jobs": table_count(db, "jobs", "status = 'failed'"),
         "total_audit_logs": db.query(func.count(AuditLog.id)).scalar() or 0,
-        "failed_logins": action_count(db, "auth.login.failed"),
-        "unauthorized_attempts": action_count(db, "auth.unauthorized"),
-        "admin_denied_attempts": (
-            action_count(db, "auth.admin.denied")
-            + action_count(db, "inventory.admin.denied")
-            + action_count(db, "orders.admin.denied")
-            + action_count(db, "reports.admin.denied")
-        ),
+        "failed_logins": sum(1 for log in security_logs if log.action == "auth.login.failed"),
+        "unauthorized_attempts": sum(1 for log in security_logs if log.action == "auth.unauthorized"),
+        "admin_denied_attempts": sum(1 for log in security_logs if log.action.endswith("admin.denied")),
         "worker_completed_jobs": action_count(db, "reports.job.completed"),
         "risk_score": score,
         "risk_level": level,
@@ -285,21 +347,17 @@ def monitoring_summary(db: Session) -> dict[str, object]:
 
 
 def security_overview(db: Session) -> dict[str, object]:
-    logs = recent_security_logs(db)
+    dismissed_ids = dismissed_alert_ids(db)
+    logs = exclude_dismissed(recent_security_logs(db), dismissed_ids)
     score, level, factors = calculate_risk_from_logs(logs)
     alerts = [alert_from_log(log) for log in logs[:20]]
 
     return {
         "risk_score": score,
         "risk_level": level,
-        "failed_logins": action_count(db, "auth.login.failed"),
-        "unauthorized_attempts": action_count(db, "auth.unauthorized"),
-        "admin_denied_attempts": (
-            action_count(db, "auth.admin.denied")
-            + action_count(db, "inventory.admin.denied")
-            + action_count(db, "orders.admin.denied")
-            + action_count(db, "reports.admin.denied")
-        ),
+        "failed_logins": sum(1 for log in logs if log.action == "auth.login.failed"),
+        "unauthorized_attempts": sum(1 for log in logs if log.action == "auth.unauthorized"),
+        "admin_denied_attempts": sum(1 for log in logs if log.action.endswith("admin.denied")),
         "risk_factors": factors,
         "alerts": alerts,
         "recent_security_events": [
@@ -320,6 +378,7 @@ def security_overview(db: Session) -> dict[str, object]:
 
 def security_charts(db: Session) -> dict[str, object]:
     since = datetime.now(timezone.utc) - timedelta(days=7)
+    dismissed_ids = dismissed_alert_ids(db)
     logs = (
         db.query(AuditLog)
         .filter(AuditLog.created_at >= since)
@@ -328,6 +387,7 @@ def security_charts(db: Session) -> dict[str, object]:
     )
     if not logs:
         logs = db.query(AuditLog).order_by(AuditLog.created_at.asc()).limit(100).all()
+    logs = exclude_dismissed(logs, dismissed_ids)
 
     grouped: dict[str, list[AuditLog]] = defaultdict(list)
     status_distribution = {"Success": 0, "Failure": 0, "Blocked": 0, "Info": 0}
@@ -430,7 +490,11 @@ def user_risk_scores(
     limit: int = 20,
     risk_level_filter: str | None = None,
 ) -> list[dict[str, object]]:
-    logs = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(500).all()
+    dismissed_ids = dismissed_alert_ids(db)
+    logs = exclude_dismissed(
+        db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(500).all(),
+        dismissed_ids,
+    )
     grouped: dict[int | None, list[AuditLog]] = defaultdict(list)
 
     for log in logs:
@@ -474,7 +538,10 @@ def user_risk_details(db: Session, user_key: str) -> dict[str, object]:
     else:
         query = query.filter(AuditLog.user_id == user_id)
 
-    logs = query.order_by(AuditLog.created_at.desc()).limit(100).all()
+    logs = exclude_dismissed(
+        query.order_by(AuditLog.created_at.desc()).limit(100).all(),
+        dismissed_alert_ids(db),
+    )
     if not logs:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

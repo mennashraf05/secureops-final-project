@@ -1,3 +1,5 @@
+import os
+
 from sqlalchemy.orm import Session
 
 from service import create_user_if_missing
@@ -6,9 +8,9 @@ from service import create_user_if_missing
 def seed_default_users(db: Session) -> None:
     create_user_if_missing(
         db,
-        name="SecureOps Admin",
-        email="admin@secureops.com",
-        password="Admin@12345",
+        name=os.getenv("AUTH_SEED_ADMIN_NAME", "SecureOps Admin"),
+        email=os.getenv("AUTH_SEED_ADMIN_EMAIL", "admin@secureops.com"),
+        password=os.getenv("AUTH_SEED_ADMIN_PASSWORD", "Admin@12345"),
         role="admin",
     )
     create_user_if_missing(

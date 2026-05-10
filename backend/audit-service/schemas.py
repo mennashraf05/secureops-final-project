@@ -35,3 +35,17 @@ class AuditLogListResponse(BaseModel):
     success: bool
     message: str
     data: list[AuditLogResponse]
+
+
+class DismissSecurityAlertRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=1000)
+
+
+class DismissedSecurityAlertResponse(BaseModel):
+    id: int
+    audit_log_id: int
+    dismissed_by: int | None
+    reason: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

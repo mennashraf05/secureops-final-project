@@ -14,14 +14,12 @@ type RoleFilter = 'all' | UserRole;
 type UserForm = {
   name: string;
   email: string;
-  password: string;
   role: UserRole;
 };
 
 const emptyForm: UserForm = {
   name: '',
   email: '',
-  password: '',
   role: 'user',
 };
 
@@ -70,8 +68,8 @@ export default function Users() {
     setError('');
     setMessage('');
 
-    if (!form.name.trim() || !form.email.trim() || !form.password) {
-      setError('Name, email, and password are required.');
+    if (!form.name.trim() || !form.email.trim()) {
+      setError('Name and email are required.');
       return;
     }
 
@@ -80,7 +78,6 @@ export default function Users() {
       const response = await createUser({
         name: form.name.trim(),
         email: form.email.trim(),
-        password: form.password,
         role: form.role,
       });
       setMessage(response.message);
@@ -150,6 +147,8 @@ export default function Users() {
     user.email,
     <Badge tone={roleTone(user.role)}>{user.role}</Badge>,
     <Badge tone={user.is_active ? 'green' : 'red'}>{user.is_active ? 'Active' : 'Inactive'}</Badge>,
+    <Badge tone={user.email_verified ? 'green' : 'red'}>{user.email_verified ? 'Verified' : 'Unverified'}</Badge>,
+    <Badge tone={user.two_factor_required ? 'green' : 'red'}>{user.two_factor_required ? 'Required' : 'Not required'}</Badge>,
     formatDate(user.created_at),
     user.id === currentUser?.id ? <span className="text-sm font-semibold text-slate-400">Current admin</span> : <Button variant="danger" onClick={() => void handleDelete(user)} disabled={deletingUserId === user.id}>
       <Trash2 size={16} className="mr-2 inline"/>{deletingUserId === user.id ? 'Deleting...' : 'Delete'}
@@ -184,16 +183,15 @@ export default function Users() {
         {error && <div className="mb-5 rounded-2xl bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</div>}
         {isLoading ? <p className="text-sm font-semibold text-slate-500">Loading users...</p> : null}
         {!isLoading && !error && filteredUsers.length === 0 ? <p className="text-sm font-semibold text-slate-500">No users match the current filters.</p> : null}
-        {!isLoading && filteredUsers.length > 0 ? <DataTable columns={['User ID','Name','Email','Role','Status','Created Date','Actions']} rows={rows}/> : null}
+        {!isLoading && filteredUsers.length > 0 ? <DataTable columns={['User ID','Name','Email','Role','Status','Email Verified','2FA Required','Created Date','Actions']} rows={rows}/> : null}
       </SectionCard>
     </section>
 
     <section className="mt-7">
       <SectionCard title="Add User" subtitle="Create a normal user or admin account.">
-        <form onSubmit={handleSubmit} className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_160px_auto]">
+        <form onSubmit={handleSubmit} className="grid gap-3 lg:grid-cols-[1fr_1fr_160px_auto]">
           <input className="rounded-2xl bg-slate-100 px-4 py-3 outline-none" placeholder="Full name" value={form.name} onChange={(event) => setField('name', event.target.value)} />
           <input className="rounded-2xl bg-slate-100 px-4 py-3 outline-none" placeholder="Email address" type="email" value={form.email} onChange={(event) => setField('email', event.target.value)} />
-          <input className="rounded-2xl bg-slate-100 px-4 py-3 outline-none" placeholder="Password" type="password" value={form.password} onChange={(event) => setField('password', event.target.value)} />
           <select className="rounded-2xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700 outline-none" value={form.role} onChange={(event) => setField('role', event.target.value as UserRole)}>
             <option value="user">User</option>
             <option value="admin">Admin</option>

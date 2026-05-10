@@ -31,3 +31,10 @@ export async function getAuditLogById(id: number | string) {
   const response = await request<ApiResponse<AuditLog>>(`/audit/logs/${id}`);
   return unwrap(response);
 }
+
+export async function deleteAuditLog(id: number | string) {
+  const response = await request<ApiResponse<unknown>>(`/audit/logs/${id}`, {
+    method: 'DELETE',
+  });
+  return unwrap(response);
+}

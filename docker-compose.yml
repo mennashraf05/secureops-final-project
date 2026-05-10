@@ -39,6 +39,19 @@ services:
     container_name: secureops-auth-service
     env_file:
       - .env
+    environment:
+      EMAIL_DEV_MODE: ${EMAIL_DEV_MODE}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USE_TLS: ${SMTP_USE_TLS}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM: ${SMTP_FROM}
+      SMTP_REDIRECT_TO: ${SMTP_REDIRECT_TO}
+      APP_BASE_URL: ${APP_BASE_URL}
+      AUTH_SEED_ADMIN_NAME: ${AUTH_SEED_ADMIN_NAME}
+      AUTH_SEED_ADMIN_EMAIL: ${AUTH_SEED_ADMIN_EMAIL}
+      AUTH_SEED_ADMIN_PASSWORD: ${AUTH_SEED_ADMIN_PASSWORD}
     expose:
       - "8000"
     depends_on:

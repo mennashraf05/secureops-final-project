@@ -1,14 +1,16 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { getMe, login, logout, register, type AuthUser } from '../api/client';
+import { getMe, login, logout, register, verify2FA, verifyTotpSetup, type AuthUser, type LoginFlowData, type RegisterResponse } from '../api/client';
 
 type AuthContextValue = {
   token: string | null;
   user: AuthUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  loginUser: (email: string, password: string) => Promise<AuthUser>;
-  registerUser: (name: string, email: string, password: string) => Promise<AuthUser>;
+  loginUser: (email: string, password: string) => Promise<LoginFlowData>;
+  verifyTwoFactor: (email: string, code: string) => Promise<AuthUser>;
+  verifyAuthenticatorSetup: (email: string, code: string) => Promise<AuthUser>;
+  registerUser: (name: string, email: string, password: string) => Promise<RegisterResponse>;
   logoutUser: () => Promise<void>;
   refreshCurrentUser: () => Promise<void>;
 };
@@ -75,14 +77,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginUser = useCallback(
     async (email: string, password: string) => {
       const response = await login(email, password);
-      storeAuth(response.access_token, response.user);
-      return response.user;
+      return response.data;
+    },
+    [],
+  );
+
+  const verifyTwoFactor = useCallback(
+    async (email: string, code: string) => {
+      const response = await verify2FA(email, code);
+      storeAuth(response.data.access_token, response.data.user);
+      return response.data.user;
+    },
+    [storeAuth],
+  );
+
+  const verifyAuthenticatorSetup = useCallback(
+    async (email: string, code: string) => {
+      const response = await verifyTotpSetup(email, code);
+      storeAuth(response.data.access_token, response.data.user);
+      return response.data.user;
     },
     [storeAuth],
   );
 
   const registerUser = useCallback(async (name: string, email: string, password: string) => {
-    return register(name, email, password);
+    const response = await register(name, email, password);
+    return response.data;
   }, []);
 
   const logoutUser = useCallback(async () => {
@@ -104,11 +124,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: Boolean(token && user),
       isLoading,
       loginUser,
+      verifyTwoFactor,
+      verifyAuthenticatorSetup,
       registerUser,
       logoutUser,
       refreshCurrentUser,
     }),
-    [isLoading, loginUser, logoutUser, refreshCurrentUser, registerUser, token, user],
+    [isLoading, loginUser, logoutUser, refreshCurrentUser, registerUser, token, user, verifyAuthenticatorSetup, verifyTwoFactor],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

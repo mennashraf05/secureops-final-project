@@ -27,6 +27,7 @@ export type RiskFactor = {
 
 export type SecurityAlert = {
   id: number;
+  audit_log_id: number;
   title: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
   source_service: string;

@@ -107,3 +107,7 @@ Part 8.5 connects the Security Center charts to real audit-log-derived backend d
 ## Part 8.6 Per-User Risk Score
 
 Part 8.6 adds per-user risk scoring derived from audit logs so admins can identify users or system actors associated with suspicious activity. See `docs/PART_8_6_PER_USER_RISK_SCORE.md` for test steps.
+
+## Part 9 Email Verification + Mandatory 2FA
+
+Part 9 adds email verification for new accounts, email setup links for admin-created accounts, and mandatory authenticator-app two-factor authentication for all users. JWT tokens are issued only after successful email/password login and 2FA verification.

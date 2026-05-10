@@ -3,7 +3,6 @@ import { request, type AuthUser } from './client';
 export type AdminCreateUserPayload = {
   name: string;
   email: string;
-  password: string;
   role: AuthUser['role'];
 };
 
