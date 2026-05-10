@@ -1,10 +1,10 @@
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, status
 from sqlalchemy.orm import Session
 
 from dependencies import AuthContext, get_current_auth_context, get_current_user, require_admin
-from schemas import LoginRequest, RegisterRequest, TokenResponse, UserResponse
+from schemas import AdminCreateUserRequest, LoginRequest, RegisterRequest, TokenResponse, UserActionResponse, UserResponse, UsersListResponse
 from seed import seed_default_users
-from service import authenticate_user, logout_user, register_user
+from service import authenticate_user, create_user_by_admin, delete_user_by_admin, list_users, logout_user, register_user
 from shared.database import Base, SessionLocal, engine, get_db
 from shared.errors import safe_exception_handler, safe_http_exception_handler
 from shared.responses import success_response
@@ -63,6 +63,41 @@ def logout(
 @app.get("/auth/me", response_model=UserResponse)
 def me(current_user=Depends(get_current_user)) -> UserResponse:
     return current_user
+
+
+@app.get("/auth/users", response_model=UsersListResponse)
+def users(
+    current_user=Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    safe_users = [UserResponse.model_validate(user) for user in list_users(db)]
+    return success_response("Users retrieved successfully.", safe_users)
+
+
+@app.post("/auth/users", response_model=UserActionResponse, status_code=201)
+def create_user(
+    payload: AdminCreateUserRequest,
+    current_user=Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    user = create_user_by_admin(db=db, payload=payload)
+    return success_response("User created successfully.", UserResponse.model_validate(user))
+
+
+@app.delete("/auth/users/{user_id}", response_model=UserActionResponse)
+def delete_user(
+    user_id: int,
+    current_user=Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot delete your own account.",
+        )
+
+    deleted_user = delete_user_by_admin(db=db, user_id=user_id)
+    return success_response("User deleted successfully.", deleted_user)
 
 
 @app.get("/auth/admin-only")

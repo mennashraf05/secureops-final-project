@@ -6,6 +6,7 @@ import Register from '../pages/auth/Register';
 import { AppLayout } from '../components/layout/AppLayout';
 import { ProtectedRoute } from './ProtectedRoute';
 import AdminDashboard from '../pages/admin/AdminDashboard';
+import Users from '../pages/admin/Users';
 import Products from '../pages/admin/Products';
 import Orders from '../pages/admin/Orders';
 import SecureFileVault from '../pages/admin/SecureFileVault';
@@ -29,6 +30,7 @@ export default function App() {
     <Route path="/admin" element={<ProtectedRoute requiredRole="admin"><AppLayout role="admin"/></ProtectedRoute>}>
       <Route index element={<Navigate to="/admin/dashboard" replace/>}/>
       <Route path="dashboard" element={<AdminDashboard/>}/>
+      <Route path="users" element={<Users/>}/>
       <Route path="products" element={<Products/>}/>
       <Route path="orders" element={<Orders/>}/>
       <Route path="vault" element={<SecureFileVault/>}/>

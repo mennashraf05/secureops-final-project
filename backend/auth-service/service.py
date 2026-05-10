@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from models import ALLOWED_ROLES, RevokedToken, User
-from schemas import LoginRequest, RegisterRequest, TokenResponse, UserResponse
+from schemas import AdminCreateUserRequest, LoginRequest, RegisterRequest, TokenResponse, UserResponse
 from security import create_access_token, hash_password, verify_password
 
 if TYPE_CHECKING:
@@ -25,6 +25,54 @@ def get_user_by_email(db: Session, email: str) -> User | None:
 
 def get_user_by_id(db: Session, user_id: int) -> User | None:
     return db.query(User).filter(User.id == user_id).first()
+
+
+def list_users(db: Session) -> list[User]:
+    return db.query(User).order_by(User.id.asc()).all()
+
+
+def create_user_by_admin(db: Session, payload: AdminCreateUserRequest) -> User:
+    email = normalize_email(payload.email)
+    if get_user_by_email(db, email):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email is already registered.",
+        )
+
+    user = User(
+        name=payload.name.strip(),
+        email=email,
+        password_hash=hash_password(payload.password),
+        role=payload.role,
+    )
+    db.add(user)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email is already registered.",
+        ) from exc
+
+    db.refresh(user)
+    send_audit_event("admin_created_user", user_id=user.id, email=user.email, role=user.role)
+    return user
+
+
+def delete_user_by_admin(db: Session, user_id: int) -> UserResponse:
+    user = get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        )
+
+    safe_user = UserResponse.model_validate(user)
+    db.delete(user)
+    db.commit()
+    send_audit_event("admin_deleted_user", user_id=safe_user.id, email=safe_user.email, role=safe_user.role)
+    return safe_user
 
 
 def is_token_revoked(db: Session, token_jti: str) -> bool:

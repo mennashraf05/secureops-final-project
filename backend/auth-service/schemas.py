@@ -14,6 +14,13 @@ class LoginRequest(BaseModel):
     password: str = Field(..., min_length=1, max_length=128)
 
 
+class AdminCreateUserRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+    email: EmailStr
+    password: str = Field(..., min_length=8, max_length=128)
+    role: str = Field(..., pattern="^(admin|user)$")
+
+
 class UserResponse(BaseModel):
     id: int
     name: str
@@ -23,6 +30,18 @@ class UserResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class UsersListResponse(BaseModel):
+    success: bool
+    message: str
+    data: list[UserResponse]
+
+
+class UserActionResponse(BaseModel):
+    success: bool
+    message: str
+    data: UserResponse | None = None
 
 
 class TokenResponse(BaseModel):

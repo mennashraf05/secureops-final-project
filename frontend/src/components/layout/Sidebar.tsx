@@ -1,10 +1,10 @@
 import { NavLink } from 'react-router-dom';
-import { Activity, Archive, Boxes, ClipboardList, FileLock2, FileText, LayoutDashboard, Network, Settings, ShieldAlert, Swords, User, UserCircle } from 'lucide-react';
+import { Activity, Archive, Boxes, ClipboardList, FileLock2, FileText, LayoutDashboard, Network, Settings, ShieldAlert, Swords, User, UserCircle, Users } from 'lucide-react';
 import { Logo } from './Logo';
 import { cn } from '../../utils/cn';
 
 const adminItems = [
-  ['Dashboard','/admin/dashboard',LayoutDashboard], ['Products','/admin/products',Boxes], ['Orders','/admin/orders',ClipboardList], ['Secure File Vault','/admin/vault',FileLock2], ['Reports','/admin/reports',FileText], ['Security Center','/admin/security',ShieldAlert], ['Attack Simulation','/admin/attack-simulation',Swords], ['Audit Logs','/admin/audit-logs',Activity], ['Architecture','/admin/architecture',Network], ['Settings','/admin/settings',Settings]
+  ['Dashboard','/admin/dashboard',LayoutDashboard], ['Users','/admin/users',Users], ['Products','/admin/products',Boxes], ['Orders','/admin/orders',ClipboardList], ['Secure File Vault','/admin/vault',FileLock2], ['Reports','/admin/reports',FileText], ['Security Center','/admin/security',ShieldAlert], ['Attack Simulation','/admin/attack-simulation',Swords], ['Audit Logs','/admin/audit-logs',Activity], ['Architecture','/admin/architecture',Network], ['Settings','/admin/settings',Settings]
 ] as const;
 const userItems = [['My Dashboard','/user/dashboard',LayoutDashboard], ['Products','/user/products',Boxes], ['My Orders','/user/orders',Archive], ['My Files','/user/files',FileLock2], ['Profile','/user/profile',UserCircle]] as const;
 export function Sidebar({ role }: { role: 'admin'|'user' }) {
