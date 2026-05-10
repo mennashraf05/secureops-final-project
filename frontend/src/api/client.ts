@@ -76,6 +76,26 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
   return response.json() as Promise<T>;
 }
 
+export async function requestBlob(path: string, options: RequestInit = {}) {
+  const headers = new Headers(options.headers);
+  const token = getStoredToken();
+
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  const response = await fetch(buildUrl(path), {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  return response;
+}
+
 export function login(email: string, password: string) {
   return request<TokenResponse>('/auth/login', {
     method: 'POST',

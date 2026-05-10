@@ -83,3 +83,7 @@ Part 6 implements asynchronous report generation using the Report Service, Rabbi
 ## Part 6.5 Frontend Reports
 
 Part 6.5 connects the Admin Reports page to the Report Service. Admins can create inventory report jobs, view job statuses, and verify worker completion through the UI. See `docs/PART_6_5_FRONTEND_REPORTS.md` for browser test steps.
+
+## Part 6.6 Report Download + Low Stock Report
+
+Part 6.6 adds downloadable report files and implements Low Stock Report generation. Security and Audit report buttons remain disabled until their backend modules are implemented. See `docs/PART_6_6_REPORT_DOWNLOAD_AND_LOW_STOCK.md` for test steps.

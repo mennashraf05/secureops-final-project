@@ -6,7 +6,7 @@ from models import ALLOWED_JOB_STATUSES, ALLOWED_JOB_TYPES
 
 
 class ReportJobCreate(BaseModel):
-    type: str = Field(default="inventory_report", pattern="^(inventory_report|orders_report)$")
+    type: str = Field(default="inventory_report", pattern="^(inventory_report|low_stock_report)$")
 
 
 class ReportJobResponse(BaseModel):
@@ -50,6 +50,4 @@ def validate_job_type(job_type: str) -> str:
     normalized_type = job_type.strip().lower()
     if normalized_type not in ALLOWED_JOB_TYPES:
         raise ValueError("Unsupported job type.")
-    if normalized_type != "inventory_report":
-        raise ValueError("Only inventory_report is implemented in Part 6.")
     return normalized_type

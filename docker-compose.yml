@@ -103,6 +103,8 @@ services:
     depends_on:
       - postgres
       - rabbitmq
+    volumes:
+      - worker-reports:/app/reports:ro
     networks:
       - secureops-network
 

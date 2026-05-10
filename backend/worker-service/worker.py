@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import pika
-from sqlalchemy import DateTime, Integer, String, Text, create_engine
+from sqlalchemy import DateTime, Integer, String, Text, create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 from shared.config import settings
@@ -66,7 +66,7 @@ def load_message(body: bytes) -> dict[str, Any]:
     payload = json.loads(body.decode("utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("Report job message must be an object.")
-    if not payload.get("job_id") or payload.get("type") != "inventory_report":
+    if not payload.get("job_id") or payload.get("type") not in {"inventory_report", "low_stock_report"}:
         raise ValueError("Unsupported report job message.")
     return payload
 
@@ -102,8 +102,49 @@ def write_inventory_report(job_id: int) -> str:
     return str(report_path)
 
 
+def write_low_stock_report(db: Session, job_id: int) -> str:
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    report_path = REPORTS_DIR / f"low_stock_report_job_{job_id}.txt"
+    generated_at = datetime.now(timezone.utc).isoformat()
+    products = db.execute(
+        text(
+            """
+            SELECT id, name, sku, category, quantity
+            FROM products
+            WHERE quantity <= 5
+            ORDER BY quantity ASC, name ASC
+            """
+        )
+    ).mappings().all()
+
+    lines = [
+        "SecureOps Low Stock Report",
+        f"Job ID: {job_id}",
+        f"Generated at: {generated_at}",
+        "Status: completed",
+        "Low stock threshold: quantity <= 5",
+        "Note: This report highlights products that need restocking.",
+        "",
+    ]
+
+    if products:
+        lines.append("Products:")
+        for product in products:
+            lines.append(
+                f"- #{product['id']} {product['name']} ({product['sku']}) | "
+                f"{product['category']} | quantity: {product['quantity']}"
+            )
+    else:
+        lines.append("No low stock products found.")
+
+    lines.append("")
+    report_path.write_text("\n".join(lines), encoding="utf-8")
+    return str(report_path)
+
+
 def process_report_job(payload: dict[str, Any]) -> None:
     job_id = int(payload["job_id"])
+    job_type = payload["type"]
 
     with SessionLocal() as db:
         job = db.query(Job).filter(Job.id == job_id).first()
@@ -117,7 +158,12 @@ def process_report_job(payload: dict[str, Any]) -> None:
 
         try:
             time.sleep(2)
-            result_path = write_inventory_report(job_id)
+            if job_type == "inventory_report":
+                result_path = write_inventory_report(job_id)
+            elif job_type == "low_stock_report":
+                result_path = write_low_stock_report(db, job_id)
+            else:
+                raise ValueError("Unsupported report job type.")
             job.status = "completed"
             job.result_path = result_path
             job.completed_at = datetime.now(timezone.utc)

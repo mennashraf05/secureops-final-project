@@ -7,7 +7,7 @@ from shared.database import Base
 
 
 ALLOWED_JOB_STATUSES = {"pending", "processing", "completed", "failed"}
-ALLOWED_JOB_TYPES = {"inventory_report", "orders_report"}
+ALLOWED_JOB_TYPES = {"inventory_report", "low_stock_report"}
 
 
 def utc_now() -> datetime:

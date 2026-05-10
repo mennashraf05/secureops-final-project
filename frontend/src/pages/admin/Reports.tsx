@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { createInventoryReport, getReportJobs } from '../../api/reports';
+import { createInventoryReport, createLowStockReport, downloadReport, getReportJobs } from '../../api/reports';
 import { useAuth } from '../../auth/AuthContext';
 import { PageHeader } from '../../components/layout/Page';
 import { SectionCard } from '../../components/cards/SectionCard';
@@ -35,6 +35,7 @@ export default function Reports() {
   const [statusFilter, setStatusFilter] = useState<FilterValue>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
+  const [downloadingJobId, setDownloadingJobId] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -80,6 +81,43 @@ export default function Reports() {
     }
   }
 
+  async function generateLowStockReport() {
+    setMessage('');
+    setError('');
+    setIsCreating(true);
+    try {
+      await createLowStockReport();
+      setMessage('Low stock report job created successfully.');
+      await loadJobs();
+      window.setTimeout(() => void loadJobs(), 3000);
+    } catch (err) {
+      const nextError = err instanceof Error ? err.message : 'Could not create low stock report job.';
+      if (nextError === 'Invalid or expired token.') {
+        await logoutUser();
+      }
+      setError(nextError);
+    } finally {
+      setIsCreating(false);
+    }
+  }
+
+  async function download(job: ReportJob) {
+    setMessage('');
+    setError('');
+    setDownloadingJobId(job.id);
+    try {
+      await downloadReport(job.id);
+    } catch (err) {
+      const nextError = err instanceof Error ? err.message : 'Could not download report.';
+      if (nextError === 'Invalid or expired token.') {
+        await logoutUser();
+      }
+      setError(nextError);
+    } finally {
+      setDownloadingJobId(null);
+    }
+  }
+
   const counts = useMemo(() => ({
     total: allJobs.length,
     pending: allJobs.filter((job) => job.status === 'pending').length,
@@ -95,8 +133,10 @@ export default function Reports() {
     formatDate(job.created_at),
     formatDate(job.completed_at),
     job.result_path || 'Not available yet',
-    job.status === 'failed' ? job.error_message || 'No error details available.' : '',
-  ]), [jobs]);
+    job.status === 'completed'
+      ? <Button variant="ghost" onClick={() => void download(job)} disabled={downloadingJobId === job.id}>{downloadingJobId === job.id ? 'Downloading...' : 'Download'}</Button>
+      : 'Not ready',
+  ]), [downloadingJobId, jobs]);
 
   return <>
     <PageHeader title="Reports & Background Jobs" subtitle="Generate reports asynchronously and monitor RabbitMQ worker processing."/>
@@ -105,9 +145,9 @@ export default function Reports() {
       <SectionCard title="Generate Inventory Report" subtitle="Submit RabbitMQ background job">
         <Button onClick={() => void generateInventoryReport()} disabled={isCreating}>{isCreating ? 'Generating...' : 'Generate Inventory Report'}</Button>
       </SectionCard>
-      <SectionCard title="Generate Security Report" subtitle="Not implemented in Part 6.5"><Button disabled>Generate</Button></SectionCard>
-      <SectionCard title="Generate Audit Report" subtitle="Not implemented in Part 6.5"><Button disabled>Generate</Button></SectionCard>
-      <SectionCard title="Generate Low Stock Report" subtitle="Not implemented in Part 6.5"><Button disabled>Generate</Button></SectionCard>
+      <SectionCard title="Generate Security Report" subtitle="Coming after Security Center integration."><Button disabled>Generate</Button></SectionCard>
+      <SectionCard title="Generate Audit Report" subtitle="Coming after Audit Logs integration."><Button disabled>Generate</Button></SectionCard>
+      <SectionCard title="Generate Low Stock Report" subtitle="Submit low-stock RabbitMQ background job"><Button onClick={() => void generateLowStockReport()} disabled={isCreating}>{isCreating ? 'Generating...' : 'Generate Low Stock Report'}</Button></SectionCard>
     </section>
 
     <section className="mt-7 grid gap-5 md:grid-cols-4">
@@ -143,7 +183,7 @@ export default function Reports() {
         {error && <div className="mb-5 rounded-2xl bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</div>}
         {isLoading ? <p className="text-sm font-semibold text-slate-500">Loading report jobs...</p> : null}
         {!isLoading && !error && jobs.length === 0 ? <p className="text-sm font-semibold text-slate-500">No report jobs match this filter.</p> : null}
-        {!isLoading && jobs.length > 0 ? <DataTable columns={['Job ID','Type','Status','Requested By','Created At','Completed At','Result Path','Error Message']} rows={rows}/> : null}
+        {!isLoading && jobs.length > 0 ? <DataTable columns={['Job ID','Type','Status','Requested By','Created At','Completed At','Result Path','Actions']} rows={rows}/> : null}
       </SectionCard>
     </section>
   </>;
