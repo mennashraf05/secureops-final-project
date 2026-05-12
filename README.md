@@ -1,157 +1,392 @@
 # SecureOps
 
-SecureOps - Secure Distributed Inventory & Risk Monitoring Platform
+Secure Distributed Inventory & Risk Monitoring Platform
 
-## Part 1 Foundation
+## 1. Project Overview
 
-Part 1 creates the clean project foundation only:
+SecureOps is a distributed, security-focused inventory and risk monitoring platform for managing users, products, product requests, asynchronous reports, audit logs, security monitoring, and admin alerts.
 
-- Docker Compose setup for Nginx, frontend, FastAPI services, PostgreSQL, RabbitMQ, and worker service
-- Shared backend utilities for configuration, database sessions, safe errors, and standard responses
-- Minimal FastAPI templates with health checks
-- RabbitMQ worker connection template
-- Nginx API Gateway routing with basic security headers and rate limiting
-- Setup documentation in `docs/PART_1_SETUP.md`
+The project demonstrates a practical microservices architecture with authentication, authorization, API gateway routing, message queue processing, centralized audit logging, operational dashboards, risk monitoring, and downloadable report generation.
 
-No authentication, inventory, orders, file upload, reports, audit workflows, or frontend integration are implemented yet.
+SecureOps includes:
 
-## Run
+- Distributed FastAPI backend services.
+- React/Vite frontend.
+- Nginx API Gateway.
+- PostgreSQL persistence.
+- RabbitMQ message queue.
+- Worker-based asynchronous report generation.
+- JWT authentication with email verification and mandatory Authenticator App 2FA.
+- Formal RBAC database tables.
+- Admin and user workflows.
+- Audit logs, Security Center, risk scoring, notifications, and rich downloadable reports.
+
+## 2. Main Features
+
+### Authentication and Identity
+
+- User registration and login.
+- JWT-based authentication.
+- Password hashing with bcrypt.
+- Email verification for new accounts.
+- Mandatory Authenticator App 2FA.
+- GitHub OAuth login.
+- Forgot password flow with reset codes.
+- Protected frontend routes for admin and user portals.
+- Remember-me session support.
+
+### Authorization and RBAC
+
+- Admin and user roles.
+- Formal RBAC tables:
+  - `roles`
+  - `permissions`
+  - `user_roles`
+  - `role_permissions`
+- Existing `users.role` column is preserved for backward compatibility.
+- Admin-only backend endpoints and frontend pages.
+- User ownership checks for user-specific resources such as orders and notifications.
+- Admin Users page for safe user management without exposing password hashes.
+
+### Inventory
+
+- Product listing.
+- Admin product create, edit, delete, and stock update.
+- Product search and filtering.
+- Low-stock logic.
+- Validation for required product fields.
+- Validation against negative price and quantity.
+- Duplicate SKU handling with safe errors.
+
+### Orders
+
+- User product request/order creation.
+- User My Orders page.
+- Admin order review.
+- Approve/reject workflow.
+- Stock deduction on approval.
+- Admin order table includes user name and email snapshots.
+- Ownership protection so users can only access their own orders.
+
+### Reports
+
+- Inventory Report.
+- Low Stock Report.
+- Security Report.
+- Audit Report.
+- RabbitMQ-backed asynchronous jobs.
+- Worker-generated downloadable `.txt` report files.
+- Rich report content based on real database summaries.
+- Job tracking with pending, processing, completed, and failed statuses.
+
+### Audit and Security
+
+- Centralized audit logs for critical system actions.
+- Failed login tracking.
+- Unauthorized access and admin-denied event tracking.
+- IP capture.
+- Security Center.
+- Realistic risk score.
+- Per-user risk score.
+- Security alerts.
+- Real security charts.
+- Dismissed security alerts.
+
+### Notifications
+
+- In-app notification bell.
+- Role-aware admin and user notifications.
+- Telegram admin notifications.
+- Settings controls for accepting or rejecting Telegram admin notifications.
+- Notification read/unread tracking.
+
+### Settings
+
+- Read-only platform and security configuration display.
+- Local browser preferences for UI behavior.
+- Secrets are hidden and not editable through the UI.
+- Telegram notification settings are controlled safely.
+- Secure File Vault and related file-security controls are clearly marked as pending where applicable.
+
+### Gateway and Infrastructure
+
+- Nginx API Gateway.
+- Gateway routing to frontend and backend services.
+- Rate limiting.
+- Request size limit.
+- Security headers.
+- RabbitMQ Management UI restricted to localhost.
+- Docker Compose orchestration.
+
+## 3. Architecture
+
+SecureOps uses a Docker Compose microservices architecture. The browser communicates through Nginx, which routes frontend and API traffic to the correct service. Backend services share PostgreSQL for persistence. Report jobs are queued through RabbitMQ and processed asynchronously by the Worker Service.
+
+```text
+Browser / React Frontend
+        |
+        v
+Nginx API Gateway
+        |
+        +--> Auth Service
+        +--> Inventory Service
+        +--> Order Service
+        +--> Report Service
+        +--> Audit Service
+        +--> File Service
+        |
+        +--> PostgreSQL
+        +--> RabbitMQ --> Worker Service
+```
+
+### Service Responsibilities
+
+- **Frontend**: React/Vite application for admin and user workflows.
+- **Nginx**: API gateway, rate limiting, request size limit, security headers, and service routing.
+- **Auth Service**: Users, login, JWT, email verification, 2FA, GitHub OAuth, forgot password, and RBAC.
+- **Inventory Service**: Product catalog, admin product management, stock updates, and internal stock deduction.
+- **Order Service**: User product requests, admin approval/rejection, order ownership, and stock deduction orchestration.
+- **Report Service**: Report job creation, status tracking, and report download endpoint.
+- **Worker Service**: RabbitMQ consumer that generates report files and updates job status.
+- **Audit Service**: Audit log ingestion, security summaries, risk score, notifications, Security Center data, and settings.
+- **File Service**: Currently health/template only; Secure File Vault work is pending.
+- **PostgreSQL**: Shared persistence for users, products, orders, jobs, audit logs, notifications, settings, and RBAC tables.
+- **RabbitMQ**: Asynchronous report job queue.
+
+## 4. Technology Stack
+
+- **Frontend**: React, Vite, TypeScript, Tailwind CSS.
+- **Backend**: Python, FastAPI, SQLAlchemy, Pydantic.
+- **Authentication**: JWT, bcrypt password hashing, Authenticator App TOTP, email codes, GitHub OAuth.
+- **Database**: PostgreSQL.
+- **Queue**: RabbitMQ.
+- **Gateway**: Nginx.
+- **Deployment**: Docker Compose.
+
+## 5. Security Design
+
+SecureOps is designed as a security-oriented platform and demo system.
+
+Implemented security controls include:
+
+- JWT authentication.
+- bcrypt password hashing.
+- Email verification.
+- Mandatory Authenticator App 2FA.
+- GitHub OAuth with verified email mapping.
+- Formal RBAC tables.
+- Admin-only endpoint protection.
+- User ownership checks.
+- Internal API key protection for service-to-service endpoints.
+- Audit logging for critical actions.
+- Safe error responses.
+- Input validation hardening across backend and frontend.
+- Rate limiting at the Nginx gateway.
+- Security headers at the Nginx gateway.
+- RabbitMQ Management UI limited to localhost.
+- Secrets hidden from UI and reports.
+
+Not yet implemented:
+
+- HTTPS termination.
+- Secure File Vault.
+- Secure upload validation, encryption, and integrity verification.
+- Full Attack Simulation backend.
+
+## 6. Report System
+
+Reports are generated asynchronously.
+
+1. An admin creates a report job through the Report Service.
+2. The Report Service stores a pending job in PostgreSQL.
+3. The Report Service publishes a RabbitMQ message.
+4. The Worker Service consumes the message.
+5. The Worker marks the job as processing.
+6. The Worker generates a `.txt` report file.
+7. The Worker marks the job as completed and stores `result_path`.
+8. Admins download the report through the existing download endpoint.
+
+Supported report types:
+
+- `inventory_report`
+- `low_stock_report`
+- `security_report`
+- `audit_report`
+
+Reports contain professional summaries based on real database data where available. Generated report files do not include secrets, password hashes, JWTs, SMTP credentials, GitHub secrets, Telegram tokens, RabbitMQ passwords, database passwords, or internal API keys.
+
+## 7. API Gateway Routes
+
+Main routes through Nginx:
+
+- `/auth/*` -> Auth Service
+- `/products/*` -> Inventory Service
+- `/orders/*` -> Order Service
+- `/reports/*` -> Report Service
+- `/audit/*` -> Audit Service
+- `/security/*` -> Audit Service security endpoints
+- `/files/*` -> File Service
+- `/` -> React frontend
+
+Health checks:
+
+- `http://localhost:8080/auth/health`
+- `http://localhost:8080/products/health`
+- `http://localhost:8080/orders/health`
+- `http://localhost:8080/files/health`
+- `http://localhost:8080/reports/health`
+- `http://localhost:8080/audit/health`
+
+## 8. Running Locally
+
+Create a local environment file from the placeholder example:
 
 ```bash
 cp .env.example .env
+```
+
+Then start the stack:
+
+```bash
 docker compose up --build
 ```
 
-## Health Checks
-
-Test through Nginx:
-
-- http://localhost:8080/auth/health
-- http://localhost:8080/products/health
-- http://localhost:8080/orders/health
-- http://localhost:8080/files/health
-- http://localhost:8080/reports/health
-- http://localhost:8080/audit/health
-
 Frontend:
 
-- http://localhost:8080
+```text
+http://localhost:8080
+```
 
-RabbitMQ management:
+RabbitMQ Management UI:
 
-- http://localhost:15673
+```text
+http://localhost:15673
+```
 
-## Part 2 Auth
+The RabbitMQ Management UI is intended for localhost-only access.
 
-Part 2 implements the Auth Service only. See `docs/PART_2_AUTH.md` for endpoints, demo accounts, and PowerShell test commands.
+## 9. Environment Variables
 
-## Part 2.5 Frontend Auth
+Use `.env.example` as the source of required variable names and placeholders. Do not commit real secrets.
 
-Part 2.5 connects the existing React frontend to the Auth Service. See `docs/PART_2_5_FRONTEND_AUTH.md` for browser test steps.
+Examples of values that must remain secret:
 
-## Part 3 Inventory
+- JWT secret.
+- Database password.
+- RabbitMQ password.
+- Internal API key.
+- SMTP password.
+- GitHub client secret.
+- Telegram bot token.
+- Telegram chat ID when sensitive.
 
-Part 3 implements the Inventory Service product management API. See `docs/PART_3_INVENTORY.md` for endpoints, RBAC rules, and PowerShell test commands.
+The application expects `.env` locally, but `.env` should not be committed.
 
-## Part 3.5 Frontend Products
+## 10. User Roles
 
-Part 3.5 connects the existing frontend product pages to the Inventory Service. See `docs/PART_3_5_FRONTEND_PRODUCTS.md` for browser test steps.
+SecureOps supports two primary user roles:
 
-## Part 4 Orders
+- `admin`
+- `user`
 
-Part 4 implements the Order Service backend for product requests. See `docs/PART_4_ORDERS.md` for endpoints, RBAC rules, and PowerShell test commands.
-## Part 4.5 Frontend Orders
+Admins can:
 
-Part 4.5 connects the existing frontend order pages to the Order Service. Users can submit real product requests from the User Products page, view their own orders in My Orders, and admins can view, approve, or reject orders from the Admin Orders page. See `docs/PART_4_5_FRONTEND_ORDERS.md` for browser test steps.
+- Manage users.
+- Manage products.
+- View and act on all orders.
+- Generate and download reports.
+- View audit logs.
+- View Security Center and monitoring dashboards.
+- Manage allowed settings and notification controls.
 
-## Part 4.6 Stock Deduction on Approval
+Users can:
 
-Part 4.6 adds automatic stock deduction when an admin approves an order. Stock is deducted only after approval, not when the order is created or rejected. The Order Service communicates with the Inventory Service using an internal API key for service-to-service security. See `docs/PART_4_6_STOCK_DEDUCTION.md` for implementation details and tests.
+- Browse available products.
+- Submit product requests/orders.
+- View their own orders.
+- Update their own profile.
+- Receive user-specific notifications.
 
-## Part 4.7 Admin Order User Info
+RBAC is stored formally in `roles`, `permissions`, `user_roles`, and `role_permissions`. The older `users.role` column remains for compatibility with existing flows and JWT role claims.
 
-Part 4.7 improves the Admin Orders page by showing user information instead of only numeric user IDs. Orders now store user snapshot fields such as `user_name` and `user_email`, with fallback handling for older orders. See `docs/PART_4_7_ADMIN_ORDER_USER_INFO.md` for details.
+## 11. Frontend Pages
 
-## Part 4.8 Admin Users
+Admin pages include:
 
-Part 4.8 adds an admin-only Users page and Auth Service endpoints for viewing, creating, and deleting registered users safely without exposing password hashes. See `docs/PART_4_8_ADMIN_USERS.md` for details.
+- Dashboard / Operations & Security Command Center.
+- Users.
+- Products.
+- Orders.
+- Reports.
+- Audit Logs.
+- Security Center.
+- Settings.
+- Architecture.
+- Secure File Vault placeholder.
+- Attack Simulation placeholder/pending workflow.
 
-## Part 6 Reports + RabbitMQ + Worker
+User pages include:
 
-Part 6 implements asynchronous report generation using the Report Service, RabbitMQ, Worker Service, and PostgreSQL job tracking. Admins can create inventory report jobs, RabbitMQ queues the jobs, and the Worker Service consumes them and marks jobs as completed. See `docs/PART_6_REPORTS_RABBITMQ_WORKER.md` for endpoints, worker behavior, and PowerShell test commands.
+- User Dashboard.
+- Available Products.
+- My Orders.
+- My Files placeholder.
+- Profile.
 
-## Part 6.5 Frontend Reports
+## 12. Documentation
 
-Part 6.5 connects the Admin Reports page to the Report Service. Admins can create inventory report jobs, view job statuses, and verify worker completion through the UI. See `docs/PART_6_5_FRONTEND_REPORTS.md` for browser test steps.
+Detailed implementation notes are stored in `docs/`. Key documents include:
 
-## Part 6.6 Report Download + Low Stock Report
+- `docs/PART_2_AUTH.md`
+- `docs/AUTH_2FA_TEST_FLOW.md`
+- `docs/PART_3_INVENTORY.md`
+- `docs/PART_4_ORDERS.md`
+- `docs/PART_6_REPORTS_RABBITMQ_WORKER.md`
+- `docs/PART_7_AUDIT_LOGS.md`
+- `docs/PART_8_MONITORING_SECURITY_CENTER.md`
+- `docs/PART_9_10_FORMAL_RBAC_TABLES.md`
+- `docs/PART_9_11_RICH_REPORT_CONTENT.md`
 
-Part 6.6 adds downloadable report files and implements Low Stock Report generation. Security and Audit report buttons remain disabled until their backend modules are implemented. See `docs/PART_6_6_REPORT_DOWNLOAD_AND_LOW_STOCK.md` for test steps.
+These documents explain the incremental build history and verification flows.
 
-## Part 7 Audit Logs
+## 13. Known Limitations and Pending Work
 
-Part 7 implements a real Audit Logs Service. Critical actions from Auth, Inventory, Orders, Reports, and Worker are recorded through an internal API key protected endpoint, and admins can view audit logs securely. See `docs/PART_7_AUDIT_LOGS.md` for backend test steps.
+The following areas are intentionally not complete yet:
 
-## Part 7.5 Frontend Audit Logs
+- HTTPS termination is not implemented.
+- Secure File Vault is not implemented.
+- Secure file upload validation is not implemented.
+- File encryption and integrity verification are not implemented.
+- File Service is currently health/template only unless later work adds vault features.
+- Attack Simulation backend is pending/coming soon.
+- Production-grade database migrations are not fully separated from startup-safe local migration logic.
 
-Part 7.5 connects the Admin Audit Logs page to the Audit Service. Admins can view centralized audit events from Auth, Inventory, Orders, Reports, and Worker with filters for service, status, action, user, and limit. See `docs/PART_7_5_FRONTEND_AUDIT_LOGS.md` for browser test steps.
+## 14. Safety Notes
 
-## Part 8 Monitoring Dashboard + Security Center
+- Do not commit `.env`.
+- Do not expose real secrets in documentation, screenshots, reports, or frontend UI.
+- Keep `.env.example` values as placeholders only.
+- Downloaded reports are designed to summarize operational and security data without exposing secrets.
+- Backend validation remains the source of truth for security validation.
 
-Part 8 connects monitoring and security dashboards to real backend data from audit logs, users, products, orders, and report jobs. It calculates a risk score, derives security alerts, and displays real security events for admins. See `docs/PART_8_MONITORING_SECURITY_CENTER.md` for test steps.
+## 15. Quick Verification
 
-## Part 8.5 Real Security Charts
+After starting the stack, verify:
 
-Part 8.5 connects the Security Center charts to real audit-log-derived backend data, including events over time, risk score trends, severity breakdown, and status distribution. See `docs/PART_8_5_REAL_SECURITY_CHARTS.md` for test steps.
+```bash
+curl http://localhost:8080/auth/health
+curl http://localhost:8080/products/health
+curl http://localhost:8080/orders/health
+curl http://localhost:8080/reports/health
+curl http://localhost:8080/audit/health
+```
 
-## Part 8.6 Per-User Risk Score
+Then test from the browser:
 
-Part 8.6 adds per-user risk scoring derived from audit logs so admins can identify users or system actors associated with suspicious activity. See `docs/PART_8_6_PER_USER_RISK_SCORE.md` for test steps.
+1. Open `http://localhost:8080`.
+2. Login through the current Auth + 2FA flow.
+3. Visit the Admin Dashboard.
+4. Open Products, Orders, Reports, Audit Logs, Security Center, Settings, and Notifications.
+5. Generate and download reports from `/admin/reports`.
+6. Confirm normal users cannot access admin-only pages.
 
-## Part 9 Email Verification + Mandatory 2FA
-
-Part 9 adds email verification for new accounts, email setup links for admin-created accounts, and mandatory two-factor authentication for all users. `/auth/login` validates email/password and starts the 2FA step; JWT tokens are issued only after `/auth/2fa/verify` succeeds. See `docs/AUTH_2FA_TEST_FLOW.md` for the updated PowerShell login commands.
-
-## Part 9.2 Dashboard Quick Actions
-
-Part 9.2 connects Admin Dashboard quick action buttons to the correct admin workflows while keeping unfinished File Integrity and Attack Simulation actions clearly marked as coming soon. See `docs/PART_9_2_DASHBOARD_QUICK_ACTIONS.md` for browser test steps.
-
-## Part 9.3 Rate Limiting + RabbitMQ Hardening
-
-Part 9.3 refines API Gateway rate limiting, adds stricter limits for authentication and 2FA endpoints, returns HTTP 429 for rate-limited requests, and restricts RabbitMQ Management UI to localhost using custom credentials. See `docs/PART_9_3_RATE_LIMITING_RABBITMQ_HARDENING.md` for verification steps.
-
-## Part 9.4 Settings Page
-
-Part 9.4 replaces placeholder settings with realistic configuration display and safe editable local UI preferences without exposing secrets. See `docs/PART_9_4_SETTINGS_PAGE.md` for browser test steps.
-
-## Part 9.5 Notifications
-
-Part 9.5 connects the bell icon to real role-based notifications. Admins receive security, report, and product request alerts, while users receive their own order/account notifications. See `docs/PART_9_5_NOTIFICATIONS.md` for test steps.
-
-## Part 9.6 GitHub OAuth
-
-Part 9.6 implements real GitHub OAuth login using a GitHub OAuth App. Users can continue with GitHub, the Auth Service exchanges the OAuth code, maps the verified GitHub email to a local user, issues a JWT, and records OAuth audit events. See `docs/PART_9_6_GITHUB_OAUTH.md` for setup and test steps.
-
-## Part 9.7 Telegram Admin Notifications
-
-Part 9.7 sends important admin alerts to Telegram and adds a Settings control so admins can accept or reject Telegram notifications. Telegram secrets remain in `.env` and are never displayed in the UI. See `docs/PART_9_7_TELEGRAM_ADMIN_NOTIFICATIONS.md` for setup and test steps.
-
-## Part 9.8 Remember Me + Forgot Password
-
-Part 9.8 makes the login Remember me option functional and adds a secure forgot-password flow using email reset codes. Password reset does not bypass mandatory 2FA. See `docs/PART_9_8_REMEMBER_ME_FORGOT_PASSWORD.md` for setup and test steps.
-
-## Part 9.9 Input Validation Hardening
-
-Part 9.9 reviews and strengthens input validation across Auth, Inventory, Orders, Reports, Audit, Settings, Notifications, and frontend forms. Backend schemas remain the source of truth for security validation. See `docs/PART_9_9_INPUT_VALIDATION_HARDENING.md` for details.
-
-## Part 9.10 Formal RBAC Tables
-
-Part 9.10 adds formal RBAC database tables for roles, permissions, user-role mapping, and role-permission mapping while preserving the existing users.role field for compatibility. See `docs/PART_9_10_FORMAL_RBAC_TABLES.md` for details.
-
-## Part 9.11 Security and Audit Reports
-
-Part 9.11 enables Security Report and Audit Report generation through the existing Report Service, RabbitMQ queue, Worker Service, and downloadable report files. Security reports summarize suspicious activity and risk indicators, while audit reports summarize centralized audit events. See `docs/PART_9_11_SECURITY_AUDIT_REPORTS.md` for details.
-
-## Part 9.11 Rich Report Content
-
-Part 9.11 upgrades generated report files from simple simulated output to professional reports containing real inventory, low-stock, security, and audit summaries generated asynchronously by the Worker Service. See `docs/PART_9_11_RICH_REPORT_CONTENT.md` for details.
