@@ -1,6 +1,12 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+def non_blank(value: str) -> str:
+    if not value.strip():
+        raise ValueError("Field cannot be blank.")
+    return value
 
 
 class OrderItemCreate(BaseModel):
@@ -11,6 +17,11 @@ class OrderItemCreate(BaseModel):
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
+    @field_validator("product_name", "product_sku")
+    @classmethod
+    def text_not_blank(cls, value: str) -> str:
+        return non_blank(value)
+
 
 class OrderCreate(BaseModel):
     items: list[OrderItemCreate] = Field(..., min_length=1)
@@ -20,6 +31,11 @@ class OrderRejectRequest(BaseModel):
     admin_response: str = Field(..., min_length=1, max_length=2000)
 
     model_config = ConfigDict(str_strip_whitespace=True)
+
+    @field_validator("admin_response")
+    @classmethod
+    def response_not_blank(cls, value: str) -> str:
+        return non_blank(value)
 
 
 class OrderItemResponse(BaseModel):

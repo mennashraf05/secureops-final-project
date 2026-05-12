@@ -4,6 +4,8 @@ import Landing from '../pages/Landing';
 import Login from '../pages/auth/Login';
 import Register from '../pages/auth/Register';
 import AccountSetup from '../pages/auth/AccountSetup';
+import ForgotPassword from '../pages/auth/ForgotPassword';
+import OAuthCallback from '../pages/auth/OAuthCallback';
 import { AppLayout } from '../components/layout/AppLayout';
 import { ProtectedRoute } from './ProtectedRoute';
 import AdminDashboard from '../pages/admin/AdminDashboard';
@@ -29,6 +31,8 @@ export default function App() {
     <Route path="/login" element={<Login/>}/>
     <Route path="/register" element={<Register/>}/>
     <Route path="/setup-account" element={<AccountSetup/>}/>
+    <Route path="/forgot-password" element={<ForgotPassword/>}/>
+    <Route path="/oauth/callback" element={<OAuthCallback/>}/>
     <Route path="/admin" element={<ProtectedRoute requiredRole="admin"><AppLayout role="admin"/></ProtectedRoute>}>
       <Route index element={<Navigate to="/admin/dashboard" replace/>}/>
       <Route path="dashboard" element={<AdminDashboard/>}/>

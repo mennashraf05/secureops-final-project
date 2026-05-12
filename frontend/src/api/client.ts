@@ -53,7 +53,7 @@ function buildUrl(path: string) {
 }
 
 function getStoredToken() {
-  return localStorage.getItem(TOKEN_STORAGE_KEY);
+  return localStorage.getItem(TOKEN_STORAGE_KEY) ?? sessionStorage.getItem(TOKEN_STORAGE_KEY);
 }
 
 async function parseError(response: Response) {
@@ -155,22 +155,50 @@ export function setPassword(email: string, code: string, password: string) {
   });
 }
 
-export function verify2FA(email: string, code: string) {
+export function verify2FA(email: string, code: string, remember_me = false) {
   return request<ApiResponse<TokenResponse>>('/auth/2fa/verify', {
     method: 'POST',
-    body: JSON.stringify({ email, code }),
+    body: JSON.stringify({ email, code, remember_me }),
   });
 }
 
-export function verifyTotpSetup(email: string, code: string) {
+export function verifyTotpSetup(email: string, code: string, remember_me = false) {
   return request<ApiResponse<TokenResponse>>('/auth/2fa/setup/verify', {
     method: 'POST',
-    body: JSON.stringify({ email, code }),
+    body: JSON.stringify({ email, code, remember_me }),
   });
 }
 
 export function getMe() {
   return request<AuthUser>('/auth/me');
+}
+
+export function updateProfile(name: string) {
+  return request<ApiResponse<AuthUser>>('/auth/profile', {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function changePassword(current_password: string, new_password: string) {
+  return request<ApiResponse<Record<string, never>>>('/auth/password', {
+    method: 'PATCH',
+    body: JSON.stringify({ current_password, new_password }),
+  });
+}
+
+export function forgotPassword(email: string) {
+  return request<ApiResponse<Record<string, never>>>('/auth/password/forgot', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function resetPassword(email: string, code: string, new_password: string) {
+  return request<ApiResponse<Record<string, never>>>('/auth/password/reset', {
+    method: 'POST',
+    body: JSON.stringify({ email, code, new_password }),
+  });
 }
 
 export function logout() {

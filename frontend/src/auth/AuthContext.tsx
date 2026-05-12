@@ -8,9 +8,10 @@ type AuthContextValue = {
   isAuthenticated: boolean;
   isLoading: boolean;
   loginUser: (email: string, password: string) => Promise<LoginFlowData>;
-  verifyTwoFactor: (email: string, code: string) => Promise<AuthUser>;
-  verifyAuthenticatorSetup: (email: string, code: string) => Promise<AuthUser>;
+  verifyTwoFactor: (email: string, code: string, rememberMe?: boolean) => Promise<AuthUser>;
+  verifyAuthenticatorSetup: (email: string, code: string, rememberMe?: boolean) => Promise<AuthUser>;
   registerUser: (name: string, email: string, password: string) => Promise<RegisterResponse>;
+  completeOAuthLogin: (token: string) => Promise<AuthUser>;
   logoutUser: () => Promise<void>;
   refreshCurrentUser: () => Promise<void>;
 };
@@ -21,38 +22,46 @@ const USER_STORAGE_KEY = 'secureops_user';
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 function readStoredUser() {
-  const rawUser = localStorage.getItem(USER_STORAGE_KEY);
+  const rawUser = localStorage.getItem(USER_STORAGE_KEY) ?? sessionStorage.getItem(USER_STORAGE_KEY);
   if (!rawUser) return null;
 
   try {
     return JSON.parse(rawUser) as AuthUser;
   } catch {
     localStorage.removeItem(USER_STORAGE_KEY);
+    sessionStorage.removeItem(USER_STORAGE_KEY);
     return null;
   }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_STORAGE_KEY));
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_STORAGE_KEY) ?? sessionStorage.getItem(TOKEN_STORAGE_KEY));
   const [user, setUser] = useState<AuthUser | null>(() => readStoredUser());
   const [isLoading, setIsLoading] = useState(true);
 
   const clearAuth = useCallback(() => {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
     localStorage.removeItem(USER_STORAGE_KEY);
+    sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+    sessionStorage.removeItem(USER_STORAGE_KEY);
     setToken(null);
     setUser(null);
   }, []);
 
-  const storeAuth = useCallback((nextToken: string, nextUser: AuthUser) => {
-    localStorage.setItem(TOKEN_STORAGE_KEY, nextToken);
-    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(nextUser));
+  const storeAuth = useCallback((nextToken: string, nextUser: AuthUser, rememberMe = true) => {
+    const primaryStorage = rememberMe ? localStorage : sessionStorage;
+    const secondaryStorage = rememberMe ? sessionStorage : localStorage;
+    secondaryStorage.removeItem(TOKEN_STORAGE_KEY);
+    secondaryStorage.removeItem(USER_STORAGE_KEY);
+    primaryStorage.setItem(TOKEN_STORAGE_KEY, nextToken);
+    primaryStorage.setItem(USER_STORAGE_KEY, JSON.stringify(nextUser));
     setToken(nextToken);
     setUser(nextUser);
   }, []);
 
   const refreshCurrentUser = useCallback(async () => {
-    if (!localStorage.getItem(TOKEN_STORAGE_KEY)) {
+    const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY) ?? sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    if (!storedToken) {
       clearAuth();
       setIsLoading(false);
       return;
@@ -60,8 +69,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const currentUser = await getMe();
-      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(currentUser));
-      setToken(localStorage.getItem(TOKEN_STORAGE_KEY));
+      const activeStorage = localStorage.getItem(TOKEN_STORAGE_KEY) ? localStorage : sessionStorage;
+      activeStorage.setItem(USER_STORAGE_KEY, JSON.stringify(currentUser));
+      setToken(storedToken);
       setUser(currentUser);
     } catch {
       clearAuth();
@@ -83,18 +93,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const verifyTwoFactor = useCallback(
-    async (email: string, code: string) => {
-      const response = await verify2FA(email, code);
-      storeAuth(response.data.access_token, response.data.user);
+    async (email: string, code: string, rememberMe = true) => {
+      const response = await verify2FA(email, code, rememberMe);
+      storeAuth(response.data.access_token, response.data.user, rememberMe);
       return response.data.user;
     },
     [storeAuth],
   );
 
   const verifyAuthenticatorSetup = useCallback(
-    async (email: string, code: string) => {
-      const response = await verifyTotpSetup(email, code);
-      storeAuth(response.data.access_token, response.data.user);
+    async (email: string, code: string, rememberMe = true) => {
+      const response = await verifyTotpSetup(email, code, rememberMe);
+      storeAuth(response.data.access_token, response.data.user, rememberMe);
       return response.data.user;
     },
     [storeAuth],
@@ -105,9 +115,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return response.data;
   }, []);
 
+  const completeOAuthLogin = useCallback(
+    async (nextToken: string) => {
+      localStorage.setItem(TOKEN_STORAGE_KEY, nextToken);
+      const currentUser = await getMe();
+      storeAuth(nextToken, currentUser, true);
+      return currentUser;
+    },
+    [storeAuth],
+  );
+
   const logoutUser = useCallback(async () => {
     try {
-      if (localStorage.getItem(TOKEN_STORAGE_KEY)) {
+      if (localStorage.getItem(TOKEN_STORAGE_KEY) || sessionStorage.getItem(TOKEN_STORAGE_KEY)) {
         await logout();
       }
     } catch {
@@ -127,10 +147,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       verifyTwoFactor,
       verifyAuthenticatorSetup,
       registerUser,
+      completeOAuthLogin,
       logoutUser,
       refreshCurrentUser,
     }),
-    [isLoading, loginUser, logoutUser, refreshCurrentUser, registerUser, token, user, verifyAuthenticatorSetup, verifyTwoFactor],
+    [completeOAuthLogin, isLoading, loginUser, logoutUser, refreshCurrentUser, registerUser, token, user, verifyAuthenticatorSetup, verifyTwoFactor],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

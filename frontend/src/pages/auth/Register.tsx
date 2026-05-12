@@ -7,6 +7,17 @@ import { Logo } from '../../components/layout/Logo';
 import { useAuth } from '../../auth/AuthContext';
 import { resendVerification, verifyEmail } from '../../api/client';
 
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+function strongEnough(value: string) {
+  return value.length >= 8
+    && /[a-z]/.test(value)
+    && /[A-Z]/.test(value)
+    && /[^A-Za-z]/.test(value);
+}
+
 export default function Register() {
   const { registerUser } = useAuth();
   const [name, setName] = useState('');
@@ -32,6 +43,10 @@ export default function Register() {
     setMessage('');
 
     if (isVerificationStep) {
+      if (!/^\d{6}$/.test(verificationCode)) {
+        setError('Verification code must be exactly 6 digits.');
+        return;
+      }
       setIsSubmitting(true);
       try {
         await verifyEmail(email, verificationCode);
@@ -50,13 +65,18 @@ export default function Register() {
       return;
     }
 
-    if (!email.includes('@')) {
+    if (!email.trim()) {
+      setError('Email is required.');
+      return;
+    }
+
+    if (!isValidEmail(email)) {
       setError('Enter a valid email address.');
       return;
     }
 
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters.');
+    if (!strongEnough(password)) {
+      setError('Password must be at least 8 characters and include uppercase, lowercase, and a number or symbol.');
       return;
     }
 
@@ -67,7 +87,7 @@ export default function Register() {
 
     setIsSubmitting(true);
     try {
-      await registerUser(name, email, password);
+      await registerUser(name.trim(), email.trim(), password);
       setIsVerificationStep(true);
       setMessage('We sent a verification code to your email.');
     } catch (err) {

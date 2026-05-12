@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta, timezone
+import hashlib
 import os
+import requests
 import secrets
 from typing import TYPE_CHECKING
 
@@ -8,10 +10,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from email_service import send_email
-from models import ALLOWED_ROLES, AuthCode, RevokedToken, User
-from schemas import AdminCreateUserRequest, LoginRequest, RegisterRequest, SetPasswordRequest, TokenResponse, UserResponse, VerifyCodeRequest, VerifyTotpSetupRequest
+from models import ALLOWED_ROLES, AuthCode, OAuthState, Permission, RevokedToken, Role, RolePermission, User, UserRole
+from schemas import AdminCreateUserRequest, ForgotPasswordRequest, LoginRequest, PasswordChangeRequest, ProfileUpdateRequest, RegisterRequest, ResetPasswordRequest, SetPasswordRequest, TokenResponse, UserResponse, VerifyCodeRequest, VerifyTotpSetupRequest
 from security import create_access_token, generate_totp_secret, hash_code, hash_password, totp_uri, verify_code, verify_password, verify_totp
 from shared.audit_client import send_audit_event
+from shared.config import settings
 
 if TYPE_CHECKING:
     from dependencies import AuthContext
@@ -21,6 +24,34 @@ EMAIL_VERIFICATION_MINUTES = 10
 LOGIN_2FA_MINUTES = 5
 MAX_CODE_ATTEMPTS = 5
 PURPOSE_EMAIL_VERIFICATION = "email_verification"
+PURPOSE_PASSWORD_RESET = "password_reset"
+OAUTH_STATE_MINUTES = 10
+GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
+GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"
+GITHUB_USER_URL = "https://api.github.com/user"
+GITHUB_EMAILS_URL = "https://api.github.com/user/emails"
+
+ADMIN_PERMISSIONS = {
+    "users:read",
+    "users:create",
+    "users:delete",
+    "products:read",
+    "products:write",
+    "orders:read",
+    "orders:approve",
+    "reports:read",
+    "reports:create",
+    "audit:read",
+    "security:read",
+    "settings:read",
+}
+USER_PERMISSIONS = {
+    "products:read",
+    "orders:create",
+    "orders:read_own",
+    "profile:read",
+    "profile:update",
+}
 
 
 def normalize_email(email: str) -> str:
@@ -49,6 +80,176 @@ def list_users(db: Session) -> list[User]:
     return db.query(User).order_by(User.id.asc()).all()
 
 
+def get_role_by_name(db: Session, role_name: str) -> Role | None:
+    return db.query(Role).filter(Role.name == role_name.strip().lower()).first()
+
+
+def get_or_create_role(db: Session, name: str, description: str | None = None) -> Role:
+    normalized = name.strip().lower()
+    role = get_role_by_name(db, normalized)
+    if role:
+        if description and role.description != description:
+            role.description = description
+        return role
+    role = Role(name=normalized, description=description)
+    db.add(role)
+    db.flush()
+    return role
+
+
+def get_or_create_permission(db: Session, name: str, description: str | None = None) -> Permission:
+    normalized = name.strip().lower()
+    permission = db.query(Permission).filter(Permission.name == normalized).first()
+    if permission:
+        if description and permission.description != description:
+            permission.description = description
+        return permission
+    permission = Permission(name=normalized, description=description)
+    db.add(permission)
+    db.flush()
+    return permission
+
+
+def grant_permission_to_role(db: Session, role: Role, permission: Permission) -> None:
+    exists = db.query(RolePermission).filter(
+        RolePermission.role_id == role.id,
+        RolePermission.permission_id == permission.id,
+    ).first()
+    if exists:
+        return
+    db.add(RolePermission(role_id=role.id, permission_id=permission.id))
+    db.flush()
+
+
+def seed_rbac(db: Session) -> None:
+    admin_role = get_or_create_role(db, "admin", "Full administrative access.")
+    user_role = get_or_create_role(db, "user", "Standard user access.")
+
+    permissions: dict[str, Permission] = {}
+    for permission_name in sorted(ADMIN_PERMISSIONS | USER_PERMISSIONS):
+        permissions[permission_name] = get_or_create_permission(db, permission_name)
+
+    for permission_name in sorted(ADMIN_PERMISSIONS | USER_PERMISSIONS):
+        grant_permission_to_role(db, admin_role, permissions[permission_name])
+    for permission_name in sorted(USER_PERMISSIONS):
+        grant_permission_to_role(db, user_role, permissions[permission_name])
+    db.commit()
+
+
+def user_role_names(user: User) -> list[str]:
+    names = sorted({
+        user_role.role.name
+        for user_role in (user.user_roles or [])
+        if user_role.role and user_role.role.name in ALLOWED_ROLES
+    })
+    if names:
+        return names
+    return [user.role if user.role in ALLOWED_ROLES else "user"]
+
+
+def effective_user_role(user: User) -> str:
+    names = user_role_names(user)
+    if "admin" in names:
+        return "admin"
+    return "user"
+
+
+def user_has_role(user: User, role_name: str) -> bool:
+    return role_name.strip().lower() in user_role_names(user)
+
+
+def user_has_permission(db: Session, user: User, permission_name: str) -> bool:
+    normalized = permission_name.strip().lower()
+    role_names = user_role_names(user)
+    return db.query(RolePermission).join(Role).join(Permission).filter(
+        Role.name.in_(role_names),
+        Permission.name == normalized,
+    ).first() is not None
+
+
+def assign_role_to_user(db: Session, user: User, role_name: str, *, replace: bool = True) -> None:
+    normalized = role_name.strip().lower()
+    if normalized not in ALLOWED_ROLES:
+        normalized = "user"
+
+    role = get_or_create_role(db, normalized)
+    if replace:
+        db.query(UserRole).filter(UserRole.user_id == user.id).delete(synchronize_session=False)
+
+    exists = db.query(UserRole).filter(
+        UserRole.user_id == user.id,
+        UserRole.role_id == role.id,
+    ).first()
+    if not exists:
+        db.add(UserRole(user_id=user.id, role_id=role.id))
+    user.role = normalized
+
+
+def backfill_user_roles(db: Session) -> None:
+    seed_rbac(db)
+    users = db.query(User).order_by(User.id.asc()).all()
+    for user in users:
+        assign_role_to_user(db, user, user.role if user.role in ALLOWED_ROLES else "user", replace=False)
+    db.commit()
+
+
+def permissions_count_for_user(db: Session, user: User) -> int:
+    role_names = user_role_names(user)
+    return int(db.query(Permission.name).join(RolePermission).join(Role).filter(
+        Role.name.in_(role_names),
+    ).distinct().count())
+
+
+def user_response(db: Session, user: User) -> UserResponse:
+    response = UserResponse.model_validate(user)
+    response.role = effective_user_role(user)
+    response.roles = user_role_names(user)
+    response.permissions_count = permissions_count_for_user(db, user)
+    return response
+
+
+def update_own_profile(db: Session, *, user: User, payload: ProfileUpdateRequest, ip_address: str | None = None) -> User:
+    user.name = payload.name.strip()
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    send_audit_event(
+        "auth.profile.updated",
+        "auth-service",
+        "success",
+        user_id=user.id,
+        ip_address=ip_address,
+        details={"email": user.email},
+    )
+    return user
+
+
+def change_own_password(db: Session, *, user: User, payload: PasswordChangeRequest, ip_address: str | None = None) -> None:
+    if not verify_password(payload.current_password, user.password_hash):
+        send_audit_event(
+            "auth.password_change.failed",
+            "auth-service",
+            "failure",
+            user_id=user.id,
+            ip_address=ip_address,
+            details={"email": user.email, "reason": "invalid_current_password"},
+        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect.")
+
+    validate_password_strength(payload.new_password)
+    user.password_hash = hash_password(payload.new_password)
+    db.add(user)
+    db.commit()
+    send_audit_event(
+        "auth.password_changed",
+        "auth-service",
+        "success",
+        user_id=user.id,
+        ip_address=ip_address,
+        details={"email": user.email},
+    )
+
+
 def validate_password_strength(password: str) -> None:
     has_lower = any(char.islower() for char in password)
     has_upper = any(char.isupper() for char in password)
@@ -62,6 +263,241 @@ def validate_password_strength(password: str) -> None:
 
 def temporary_password_hash() -> str:
     return hash_password(secrets.token_urlsafe(32))
+
+
+def oauth_configured() -> bool:
+    return bool(settings.github_client_id and settings.github_client_secret and settings.github_oauth_redirect_uri)
+
+
+def oauth_state_hash(state: str) -> str:
+    return hashlib.sha256(state.encode("utf-8")).hexdigest()
+
+
+def create_github_oauth_state(db: Session, ip_address: str | None = None) -> str:
+    state = secrets.token_urlsafe(32)
+    db.query(OAuthState).filter(OAuthState.expires_at < utc_now()).delete(synchronize_session=False)
+    db.add(
+        OAuthState(
+            provider="github",
+            state_hash=oauth_state_hash(state),
+            expires_at=utc_now() + timedelta(minutes=OAUTH_STATE_MINUTES),
+        )
+    )
+    db.commit()
+    send_audit_event(
+        "auth.oauth.github.started",
+        "auth-service",
+        "info",
+        ip_address=ip_address,
+        details={"provider": "github"},
+    )
+    return state
+
+
+def validate_github_oauth_state(db: Session, state: str | None, ip_address: str | None = None) -> None:
+    if not state:
+        send_audit_event(
+            "auth.oauth.github.failed",
+            "auth-service",
+            "blocked",
+            ip_address=ip_address,
+            details={"reason": "missing_state"},
+        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid GitHub OAuth state.")
+
+    row = (
+        db.query(OAuthState)
+        .filter(
+            OAuthState.provider == "github",
+            OAuthState.state_hash == oauth_state_hash(state),
+            OAuthState.used_at.is_(None),
+        )
+        .first()
+    )
+    if not row or aware_utc(row.expires_at) < utc_now():
+        send_audit_event(
+            "auth.oauth.github.failed",
+            "auth-service",
+            "blocked",
+            ip_address=ip_address,
+            details={"reason": "invalid_state"},
+        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid GitHub OAuth state.")
+
+    row.used_at = utc_now()
+    db.commit()
+
+
+def frontend_url() -> str:
+    return settings.frontend_url.rstrip("/")
+
+
+def github_callback_redirect(token: str | None = None, role: str | None = None, error: str | None = None) -> str:
+    if error:
+        return f"{frontend_url()}/oauth/callback?error={error}"
+    return f"{frontend_url()}/oauth/callback?token={token}&role={role}"
+
+
+def exchange_github_code(code: str) -> str:
+    response = requests.post(
+        GITHUB_TOKEN_URL,
+        headers={"Accept": "application/json"},
+        data={
+            "client_id": settings.github_client_id,
+            "client_secret": settings.github_client_secret,
+            "code": code,
+            "redirect_uri": settings.github_oauth_redirect_uri,
+        },
+        timeout=10,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    access_token = payload.get("access_token")
+    if not access_token:
+        raise ValueError("GitHub token exchange failed.")
+    return str(access_token)
+
+
+def fetch_github_json(url: str, access_token: str):
+    response = requests.get(
+        url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {access_token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+        timeout=10,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def verified_github_email(profile: dict, emails: list[dict]) -> str | None:
+    for email in emails:
+        if email.get("primary") and email.get("verified") and email.get("email"):
+            return normalize_email(str(email["email"]))
+
+    public_email = profile.get("email")
+    if public_email:
+        return normalize_email(str(public_email))
+
+    for email in emails:
+        if email.get("verified") and email.get("email"):
+            return normalize_email(str(email["email"]))
+
+    return None
+
+
+def find_or_create_github_user(db: Session, *, email: str, profile: dict, ip_address: str | None = None) -> tuple[User, bool]:
+    user = get_user_by_email(db, email)
+    github_id = str(profile.get("id") or "")
+    github_name = str(profile.get("name") or profile.get("login") or email)
+
+    if user:
+        user.email_verified = True
+        user.oauth_provider = "github"
+        user.oauth_id = github_id or user.oauth_id
+        assign_role_to_user(db, user, user.role if user.role in ALLOWED_ROLES else "user", replace=False)
+        db.commit()
+        db.refresh(user)
+        return user, False
+
+    user = User(
+        name=github_name,
+        email=email,
+        password_hash=temporary_password_hash(),
+        role="user",
+        oauth_provider="github",
+        oauth_id=github_id or None,
+        email_verified=True,
+        two_factor_enabled=True,
+        two_factor_required=True,
+        two_factor_method="authenticator",
+        totp_confirmed=False,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    assign_role_to_user(db, user, "user")
+    db.commit()
+    db.refresh(user)
+    send_audit_event(
+        "auth.oauth.github.user.created",
+        "auth-service",
+        "success",
+        user_id=user.id,
+        ip_address=ip_address,
+        details={"email": user.email, "role": user.role},
+    )
+    return user, True
+
+
+def complete_github_oauth_login(db: Session, *, code: str, state: str | None, ip_address: str | None = None) -> TokenResponse:
+    if not oauth_configured():
+        send_audit_event(
+            "auth.oauth.github.failed",
+            "auth-service",
+            "failure",
+            ip_address=ip_address,
+            details={"reason": "not_configured"},
+        )
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="GitHub OAuth is not configured.")
+
+    validate_github_oauth_state(db, state, ip_address=ip_address)
+
+    try:
+        access_token = exchange_github_code(code)
+        profile = fetch_github_json(GITHUB_USER_URL, access_token)
+        emails_payload = fetch_github_json(GITHUB_EMAILS_URL, access_token)
+        emails = emails_payload if isinstance(emails_payload, list) else []
+        email = verified_github_email(profile if isinstance(profile, dict) else {}, emails)
+        if not email:
+            raise ValueError("verified_email_missing")
+        user, _ = find_or_create_github_user(db, email=email, profile=profile, ip_address=ip_address)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        send_audit_event(
+            "auth.oauth.github.failed",
+            "auth-service",
+            "failure",
+            ip_address=ip_address,
+            details={"reason": exc.__class__.__name__},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="GitHub account does not provide a verified email." if str(exc) == "verified_email_missing" else "GitHub login failed.",
+        ) from exc
+
+    if not user.is_active:
+        send_audit_event(
+            "auth.oauth.github.failed",
+            "auth-service",
+            "blocked",
+            user_id=user.id,
+            ip_address=ip_address,
+            details={"reason": "inactive_user"},
+        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="GitHub login failed.")
+
+    token, _, _, expires_in = create_access_token(user)
+    send_audit_event(
+        "auth.oauth.github.success",
+        "auth-service",
+        "success",
+        user_id=user.id,
+        ip_address=ip_address,
+        details={"email": user.email, "role": user.role},
+    )
+    send_audit_event(
+        "auth.login.success",
+        "auth-service",
+        "success",
+        user_id=user.id,
+        ip_address=ip_address,
+        details={"email": user.email, "role": user.role, "provider": "github"},
+    )
+    return TokenResponse(access_token=token, expires_in=expires_in, user=user_response(db, user))
 
 
 def app_base_url() -> str:
@@ -97,8 +533,11 @@ def create_user_by_admin(db: Session, payload: AdminCreateUserRequest, admin_id:
         ) from exc
 
     db.refresh(user)
+    assign_role_to_user(db, user, payload.role)
+    db.commit()
+    db.refresh(user)
     send_audit_event(
-        "admin.action",
+        "auth.admin.user.created",
         "auth-service",
         "success",
         user_id=admin_id,
@@ -117,12 +556,13 @@ def delete_user_by_admin(db: Session, user_id: int) -> UserResponse:
             detail="User not found.",
         )
 
-    safe_user = UserResponse.model_validate(user)
+    safe_user = user_response(db, user)
     db.query(AuthCode).filter(AuthCode.user_id == user_id).delete(synchronize_session=False)
+    db.query(UserRole).filter(UserRole.user_id == user_id).delete(synchronize_session=False)
     db.delete(user)
     db.commit()
     send_audit_event(
-        "admin.action",
+        "auth.admin.user.deleted",
         "auth-service",
         "success",
         user_id=safe_user.id,
@@ -140,7 +580,7 @@ def generate_numeric_code() -> str:
 
 
 def create_auth_code(db: Session, user: User, purpose: str, code: str) -> AuthCode:
-    expires_in = EMAIL_VERIFICATION_MINUTES if purpose == PURPOSE_EMAIL_VERIFICATION else LOGIN_2FA_MINUTES
+    expires_in = EMAIL_VERIFICATION_MINUTES if purpose in {PURPOSE_EMAIL_VERIFICATION, PURPOSE_PASSWORD_RESET} else LOGIN_2FA_MINUTES
     auth_code = AuthCode(
         user_id=user.id,
         code_hash=hash_code(code),
@@ -205,6 +645,99 @@ def send_account_setup_code(db: Session, user: User, ip_address: str | None = No
         ip_address=ip_address,
         details={"email": user.email, "account_setup": True},
     )
+
+
+def request_password_reset(db: Session, payload: ForgotPasswordRequest, ip_address: str | None = None) -> dict[str, str]:
+    email = normalize_email(str(payload.email))
+    user = get_user_by_email(db, email)
+    if not user:
+        send_audit_event(
+            "auth.password_reset.requested_unknown",
+            "auth-service",
+            "info",
+            ip_address=ip_address,
+            details={"email": email},
+        )
+        return {"email": email}
+
+    code = generate_numeric_code()
+    create_auth_code(db, user, PURPOSE_PASSWORD_RESET, code)
+    try:
+        send_email(
+            user.email,
+            "SecureOps Password Reset Code",
+            (
+                f"Your password reset code is: {code}\n"
+                "This code expires in 10 minutes.\n"
+                "If you did not request this, ignore this email."
+            ),
+        )
+    except Exception as exc:
+        send_audit_event(
+            "auth.password_reset.failed",
+            "auth-service",
+            "failure",
+            user_id=user.id,
+            ip_address=ip_address,
+            details={"email": user.email, "reason": "email_send_failed"},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Could not send password reset email. Check SMTP configuration.",
+        ) from exc
+
+    send_audit_event(
+        "auth.password_reset.requested",
+        "auth-service",
+        "success",
+        user_id=user.id,
+        ip_address=ip_address,
+        details={"email": user.email},
+    )
+    return {"email": email}
+
+
+def reset_password_with_code(db: Session, payload: ResetPasswordRequest, ip_address: str | None = None) -> dict[str, str]:
+    validate_password_strength(payload.new_password)
+    email = normalize_email(str(payload.email))
+    user = get_user_by_email(db, email)
+    if not user:
+        send_audit_event(
+            "auth.password_reset.failed",
+            "auth-service",
+            "failure",
+            ip_address=ip_address,
+            details={"email": email, "reason": "invalid_user_or_code"},
+        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset code.")
+
+    try:
+        auth_code = validate_auth_code(db, user, PURPOSE_PASSWORD_RESET, payload.code)
+    except HTTPException:
+        send_audit_event(
+            "auth.password_reset.failed",
+            "auth-service",
+            "failure",
+            user_id=user.id,
+            ip_address=ip_address,
+            details={"email": user.email, "reason": "invalid_or_expired_code"},
+        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset code.") from None
+
+    user.password_hash = hash_password(payload.new_password)
+    auth_code.used_at = utc_now()
+    db.add(user)
+    db.add(auth_code)
+    db.commit()
+    send_audit_event(
+        "auth.password_reset.success",
+        "auth-service",
+        "success",
+        user_id=user.id,
+        ip_address=ip_address,
+        details={"email": user.email},
+    )
+    return {"email": user.email}
 
 
 def latest_unused_code(db: Session, user: User, purpose: str) -> AuthCode | None:
@@ -273,6 +806,9 @@ def register_user(db: Session, payload: RegisterRequest, ip_address: str | None 
         ) from exc
 
     db.refresh(user)
+    assign_role_to_user(db, user, "user")
+    db.commit()
+    db.refresh(user)
     send_audit_event(
         "auth.register.success",
         "auth-service",
@@ -302,6 +838,7 @@ def create_user_if_missing(
         existing_user.two_factor_enabled = True
         existing_user.two_factor_required = True
         existing_user.two_factor_method = "authenticator"
+        assign_role_to_user(db, existing_user, existing_user.role if existing_user.role in ALLOWED_ROLES else role, replace=False)
         db.commit()
         db.refresh(existing_user)
         return existing_user
@@ -317,6 +854,9 @@ def create_user_if_missing(
         two_factor_method="authenticator",
     )
     db.add(user)
+    db.commit()
+    db.refresh(user)
+    assign_role_to_user(db, user, role)
     db.commit()
     db.refresh(user)
     return user
@@ -491,7 +1031,7 @@ def verify_login_2fa(db: Session, payload: VerifyCodeRequest, ip_address: str | 
         )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid authenticator code.")
 
-    token, _, _, expires_in = create_access_token(user)
+    token, _, _, expires_in = create_access_token(user, remember_me=payload.remember_me)
     send_audit_event(
         "auth.2fa.success",
         "auth-service",
@@ -508,7 +1048,7 @@ def verify_login_2fa(db: Session, payload: VerifyCodeRequest, ip_address: str | 
         ip_address=ip_address,
         details={"email": user.email, "role": user.role},
     )
-    return TokenResponse(access_token=token, expires_in=expires_in, user=UserResponse.model_validate(user))
+    return TokenResponse(access_token=token, expires_in=expires_in, user=user_response(db, user))
 
 
 def verify_totp_setup(db: Session, payload: VerifyTotpSetupRequest, ip_address: str | None = None) -> TokenResponse:
@@ -527,10 +1067,10 @@ def verify_totp_setup(db: Session, payload: VerifyTotpSetupRequest, ip_address: 
     user.two_factor_method = "authenticator"
     db.commit()
 
-    token, _, _, expires_in = create_access_token(user)
+    token, _, _, expires_in = create_access_token(user, remember_me=payload.remember_me)
     send_audit_event("auth.2fa.success", "auth-service", "success", user_id=user.id, ip_address=ip_address, details={"email": user.email, "role": user.role, "setup": True})
     send_audit_event("auth.login.success", "auth-service", "success", user_id=user.id, ip_address=ip_address, details={"email": user.email, "role": user.role})
-    return TokenResponse(access_token=token, expires_in=expires_in, user=UserResponse.model_validate(user))
+    return TokenResponse(access_token=token, expires_in=expires_in, user=user_response(db, user))
 
 
 def logout_user(db: Session, context: "AuthContext") -> None:

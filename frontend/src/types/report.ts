@@ -1,5 +1,5 @@
 export type ReportJobStatus = 'pending' | 'processing' | 'completed' | 'failed';
-export type ReportJobType = 'inventory_report' | 'low_stock_report';
+export type ReportJobType = 'inventory_report' | 'low_stock_report' | 'security_report' | 'audit_report';
 
 export type ReportJob = {
   id: number;

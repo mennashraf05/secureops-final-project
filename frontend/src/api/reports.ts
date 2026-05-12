@@ -30,6 +30,18 @@ export async function createLowStockReport() {
   });
 }
 
+export async function createSecurityReport() {
+  return request<ApiResponse<ReportJob>>('/reports/security', {
+    method: 'POST',
+  });
+}
+
+export async function createAuditReport() {
+  return request<ApiResponse<ReportJob>>('/reports/audit', {
+    method: 'POST',
+  });
+}
+
 export async function getReportJobs(params?: ReportJobQueryParams) {
   const response = await request<ApiResponse<ReportJob[]>>(`/reports/jobs${reportJobQuery(params)}`);
   return unwrap(response);

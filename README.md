@@ -111,3 +111,47 @@ Part 8.6 adds per-user risk scoring derived from audit logs so admins can identi
 ## Part 9 Email Verification + Mandatory 2FA
 
 Part 9 adds email verification for new accounts, email setup links for admin-created accounts, and mandatory two-factor authentication for all users. `/auth/login` validates email/password and starts the 2FA step; JWT tokens are issued only after `/auth/2fa/verify` succeeds. See `docs/AUTH_2FA_TEST_FLOW.md` for the updated PowerShell login commands.
+
+## Part 9.2 Dashboard Quick Actions
+
+Part 9.2 connects Admin Dashboard quick action buttons to the correct admin workflows while keeping unfinished File Integrity and Attack Simulation actions clearly marked as coming soon. See `docs/PART_9_2_DASHBOARD_QUICK_ACTIONS.md` for browser test steps.
+
+## Part 9.3 Rate Limiting + RabbitMQ Hardening
+
+Part 9.3 refines API Gateway rate limiting, adds stricter limits for authentication and 2FA endpoints, returns HTTP 429 for rate-limited requests, and restricts RabbitMQ Management UI to localhost using custom credentials. See `docs/PART_9_3_RATE_LIMITING_RABBITMQ_HARDENING.md` for verification steps.
+
+## Part 9.4 Settings Page
+
+Part 9.4 replaces placeholder settings with realistic configuration display and safe editable local UI preferences without exposing secrets. See `docs/PART_9_4_SETTINGS_PAGE.md` for browser test steps.
+
+## Part 9.5 Notifications
+
+Part 9.5 connects the bell icon to real role-based notifications. Admins receive security, report, and product request alerts, while users receive their own order/account notifications. See `docs/PART_9_5_NOTIFICATIONS.md` for test steps.
+
+## Part 9.6 GitHub OAuth
+
+Part 9.6 implements real GitHub OAuth login using a GitHub OAuth App. Users can continue with GitHub, the Auth Service exchanges the OAuth code, maps the verified GitHub email to a local user, issues a JWT, and records OAuth audit events. See `docs/PART_9_6_GITHUB_OAUTH.md` for setup and test steps.
+
+## Part 9.7 Telegram Admin Notifications
+
+Part 9.7 sends important admin alerts to Telegram and adds a Settings control so admins can accept or reject Telegram notifications. Telegram secrets remain in `.env` and are never displayed in the UI. See `docs/PART_9_7_TELEGRAM_ADMIN_NOTIFICATIONS.md` for setup and test steps.
+
+## Part 9.8 Remember Me + Forgot Password
+
+Part 9.8 makes the login Remember me option functional and adds a secure forgot-password flow using email reset codes. Password reset does not bypass mandatory 2FA. See `docs/PART_9_8_REMEMBER_ME_FORGOT_PASSWORD.md` for setup and test steps.
+
+## Part 9.9 Input Validation Hardening
+
+Part 9.9 reviews and strengthens input validation across Auth, Inventory, Orders, Reports, Audit, Settings, Notifications, and frontend forms. Backend schemas remain the source of truth for security validation. See `docs/PART_9_9_INPUT_VALIDATION_HARDENING.md` for details.
+
+## Part 9.10 Formal RBAC Tables
+
+Part 9.10 adds formal RBAC database tables for roles, permissions, user-role mapping, and role-permission mapping while preserving the existing users.role field for compatibility. See `docs/PART_9_10_FORMAL_RBAC_TABLES.md` for details.
+
+## Part 9.11 Security and Audit Reports
+
+Part 9.11 enables Security Report and Audit Report generation through the existing Report Service, RabbitMQ queue, Worker Service, and downloadable report files. Security reports summarize suspicious activity and risk indicators, while audit reports summarize centralized audit events. See `docs/PART_9_11_SECURITY_AUDIT_REPORTS.md` for details.
+
+## Part 9.11 Rich Report Content
+
+Part 9.11 upgrades generated report files from simple simulated output to professional reports containing real inventory, low-stock, security, and audit summaries generated asynchronously by the Worker Service. See `docs/PART_9_11_RICH_REPORT_CONTENT.md` for details.

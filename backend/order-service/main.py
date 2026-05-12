@@ -1,4 +1,6 @@
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
+from typing import Annotated
+
+from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -81,7 +83,7 @@ def create_order_endpoint(
         "success",
         user_id=current_user.user_id,
         ip_address=get_client_ip(request),
-        details={"order_id": order.id, "items": len(order.items)},
+        details={"order_id": order.id, "order_user_id": order.user_id, "items": len(order.items)},
     )
     return success_response("Order created successfully.", OrderResponse.model_validate(order))
 
@@ -102,7 +104,7 @@ def my_orders_endpoint(
 @app.get("/orders/", include_in_schema=False)
 @app.get("/orders")
 def list_orders_endpoint(
-    order_status: str | None = Query(default=None, alias="status"),
+    order_status: str | None = Query(default=None, alias="status", pattern="^(pending|approved|rejected|completed)$"),
     current_user: CurrentUserPayload = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
@@ -116,7 +118,7 @@ def list_orders_endpoint(
 @app.get("/orders/{order_id}/", include_in_schema=False)
 @app.get("/orders/{order_id}")
 def get_order_endpoint(
-    order_id: int,
+    order_id: Annotated[int, Path(gt=0)],
     current_user: CurrentUserPayload = Depends(get_current_user_payload),
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
@@ -127,7 +129,7 @@ def get_order_endpoint(
 @app.patch("/orders/{order_id}/approve/", include_in_schema=False)
 @app.patch("/orders/{order_id}/approve")
 def approve_order_endpoint(
-    order_id: int,
+    order_id: Annotated[int, Path(gt=0)],
     request: Request,
     current_user: CurrentUserPayload = Depends(require_admin),
     db: Session = Depends(get_db),
@@ -139,7 +141,7 @@ def approve_order_endpoint(
         "success",
         user_id=current_user.user_id,
         ip_address=get_client_ip(request),
-        details={"order_id": order.id, "requester_id": order.user_id},
+        details={"order_id": order.id, "requester_id": order.user_id, "order_user_id": order.user_id, "status": order.status},
     )
     return success_response("Order approved successfully.", OrderResponse.model_validate(order))
 
@@ -147,7 +149,7 @@ def approve_order_endpoint(
 @app.patch("/orders/{order_id}/reject/", include_in_schema=False)
 @app.patch("/orders/{order_id}/reject")
 def reject_order_endpoint(
-    order_id: int,
+    order_id: Annotated[int, Path(gt=0)],
     payload: OrderRejectRequest,
     request: Request,
     current_user: CurrentUserPayload = Depends(require_admin),
@@ -160,6 +162,6 @@ def reject_order_endpoint(
         "success",
         user_id=current_user.user_id,
         ip_address=get_client_ip(request),
-        details={"order_id": order.id, "requester_id": order.user_id},
+        details={"order_id": order.id, "requester_id": order.user_id, "order_user_id": order.user_id, "status": order.status},
     )
     return success_response("Order rejected successfully.", OrderResponse.model_validate(order))

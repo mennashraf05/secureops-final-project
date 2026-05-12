@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     fernet_key: str
 
     frontend_port: int = 5173
+    github_client_id: str | None = None
+    github_client_secret: str | None = None
+    github_oauth_redirect_uri: str | None = None
+    frontend_url: str = "http://localhost:8080"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

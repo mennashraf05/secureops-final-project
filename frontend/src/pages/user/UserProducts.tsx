@@ -87,6 +87,10 @@ export default function UserProducts() {
     }
 
     const requestedQuantity = quantityFor(product);
+    if (requestedQuantity <= 0 || requestedQuantity > product.quantity) {
+      setError('Quantity must be greater than 0 and no more than available stock.');
+      return;
+    }
     setSubmittingProductId(product.id);
     try {
       await createOrder({

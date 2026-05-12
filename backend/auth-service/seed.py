@@ -2,10 +2,11 @@ import os
 
 from sqlalchemy.orm import Session
 
-from service import create_user_if_missing
+from service import create_user_if_missing, seed_rbac
 
 
 def seed_default_users(db: Session) -> None:
+    seed_rbac(db)
     create_user_if_missing(
         db,
         name=os.getenv("AUTH_SEED_ADMIN_NAME", "SecureOps Admin"),

@@ -6,7 +6,7 @@ from models import ALLOWED_JOB_STATUSES, ALLOWED_JOB_TYPES
 
 
 class ReportJobCreate(BaseModel):
-    type: str = Field(default="inventory_report", pattern="^(inventory_report|low_stock_report)$")
+    type: str = Field(default="inventory_report", pattern="^(inventory_report|low_stock_report|security_report|audit_report)$")
 
 
 class ReportJobResponse(BaseModel):

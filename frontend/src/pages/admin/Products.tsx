@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Plus, Search, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { PageHeader } from '../../components/layout/Page';
 import { KpiCard } from '../../components/cards/KpiCard';
@@ -52,8 +53,14 @@ function formToPayload(form: ProductForm): ProductCreate {
   };
 }
 
+function isNonNegativeNumber(value: string) {
+  const parsed = Number(value);
+  return value.trim() !== '' && Number.isFinite(parsed) && parsed >= 0;
+}
+
 export default function Products() {
   const { logoutUser } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState('');
   const [lowStockOnly, setLowStockOnly] = useState(false);
@@ -133,6 +140,15 @@ export default function Products() {
     setIsProductFormOpen(true);
   }
 
+  useEffect(() => {
+    if (searchParams.get('action') !== 'add') return;
+
+    startAddProduct();
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('action');
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   function closeProductForm() {
     resetForm();
     setIsProductFormOpen(false);
@@ -144,16 +160,16 @@ export default function Products() {
     setSuccess('');
 
     const payload = formToPayload(form);
-    if (!payload.name || !payload.sku || !payload.category) {
-      setError('Name, SKU, and category are required.');
+    if (!form.name.trim() || !form.sku.trim() || !form.category.trim()) {
+      setError('Name, SKU, and category are required and cannot be blank.');
       return;
     }
-    if (!Number.isFinite(payload.price) || !Number.isFinite(payload.quantity)) {
-      setError('Price and quantity must be valid numbers.');
+    if (!isNonNegativeNumber(form.price) || !isNonNegativeNumber(form.quantity)) {
+      setError('Price and quantity must be valid non-negative numbers.');
       return;
     }
-    if (payload.price < 0 || payload.quantity < 0) {
-      setError('Price and quantity cannot be negative.');
+    if (!Number.isInteger(payload.quantity)) {
+      setError('Quantity must be a whole number.');
       return;
     }
 
@@ -182,8 +198,8 @@ export default function Products() {
     if (!stockProduct) return;
 
     const quantity = Number(stockQuantity);
-    if (quantity < 0) {
-      setError('Quantity cannot be negative.');
+    if (!isNonNegativeNumber(stockQuantity) || !Number.isInteger(quantity)) {
+      setError('Quantity must be a valid non-negative whole number.');
       return;
     }
 

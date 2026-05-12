@@ -63,14 +63,32 @@ def totp_uri(secret: str, email: str, issuer: str = "SecureOps") -> str:
     )
 
 
-def create_access_token(user: User) -> tuple[str, str, datetime, int]:
-    expires_delta = timedelta(minutes=settings.access_token_expire_minutes)
+def token_role_for_user(user: User) -> str:
+    try:
+        role_names = {
+            user_role.role.name
+            for user_role in (user.user_roles or [])
+            if user_role.role and user_role.role.name in {"admin", "user"}
+        }
+    except Exception:
+        role_names = set()
+
+    if "admin" in role_names:
+        return "admin"
+    if "user" in role_names:
+        return "user"
+    return user.role if user.role in {"admin", "user"} else "user"
+
+
+def create_access_token(user: User, remember_me: bool = False) -> tuple[str, str, datetime, int]:
+    expires_minutes = 60 * 24 * 7 if remember_me else settings.access_token_expire_minutes
+    expires_delta = timedelta(minutes=expires_minutes)
     expires_at = datetime.now(timezone.utc) + expires_delta
     token_jti = uuid4().hex
     payload = {
         "sub": str(user.id),
         "email": user.email,
-        "role": user.role,
+        "role": token_role_for_user(user),
         "jti": token_jti,
         "exp": expires_at,
     }

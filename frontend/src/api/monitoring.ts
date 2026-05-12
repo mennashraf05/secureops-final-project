@@ -39,6 +39,13 @@ export async function getUserRiskDetails(userId: number | 'system') {
   return unwrap(response);
 }
 
+export async function deleteUserRiskEvents(userId: number | 'system') {
+  const response = await request<ApiResponse<{ deleted_count: number }>>(`/audit/security/user-risk/${userId}`, {
+    method: 'DELETE',
+  });
+  return unwrap(response);
+}
+
 export async function dismissSecurityAlert(auditLogId: number, reason = 'Reviewed by admin') {
   const response = await request<ApiResponse<unknown>>(`/audit/security/alerts/${auditLogId}/dismiss`, {
     method: 'POST',

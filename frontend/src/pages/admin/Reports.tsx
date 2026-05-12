@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { createInventoryReport, createLowStockReport, downloadReport, getReportJobs } from '../../api/reports';
+import { createAuditReport, createInventoryReport, createLowStockReport, createSecurityReport, downloadReport, getReportJobs } from '../../api/reports';
 import { useAuth } from '../../auth/AuthContext';
 import { PageHeader } from '../../components/layout/Page';
 import { SectionCard } from '../../components/cards/SectionCard';
@@ -26,6 +26,16 @@ function statusTone(status: ReportJobStatus) {
 function requestedBy(value: ReportJob['requested_by']) {
   if (value === null || value === undefined || value === '') return 'Unknown';
   return `User #${value}`;
+}
+
+function reportTypeLabel(type: ReportJob['type']) {
+  const labels: Record<ReportJob['type'], string> = {
+    inventory_report: 'Inventory Report',
+    low_stock_report: 'Low Stock Report',
+    security_report: 'Security Report',
+    audit_report: 'Audit Report',
+  };
+  return labels[type] ?? type;
 }
 
 export default function Reports() {
@@ -62,6 +72,7 @@ export default function Reports() {
   }, [statusFilter]);
 
   async function generateInventoryReport() {
+    if (isCreating) return;
     setMessage('');
     setError('');
     setIsCreating(true);
@@ -82,6 +93,7 @@ export default function Reports() {
   }
 
   async function generateLowStockReport() {
+    if (isCreating) return;
     setMessage('');
     setError('');
     setIsCreating(true);
@@ -92,6 +104,48 @@ export default function Reports() {
       window.setTimeout(() => void loadJobs(), 3000);
     } catch (err) {
       const nextError = err instanceof Error ? err.message : 'Could not create low stock report job.';
+      if (nextError === 'Invalid or expired token.') {
+        await logoutUser();
+      }
+      setError(nextError);
+    } finally {
+      setIsCreating(false);
+    }
+  }
+
+  async function generateSecurityReport() {
+    if (isCreating) return;
+    setMessage('');
+    setError('');
+    setIsCreating(true);
+    try {
+      await createSecurityReport();
+      setMessage('Security report job created successfully.');
+      await loadJobs();
+      window.setTimeout(() => void loadJobs(), 3000);
+    } catch (err) {
+      const nextError = err instanceof Error ? err.message : 'Could not create security report job.';
+      if (nextError === 'Invalid or expired token.') {
+        await logoutUser();
+      }
+      setError(nextError);
+    } finally {
+      setIsCreating(false);
+    }
+  }
+
+  async function generateAuditReport() {
+    if (isCreating) return;
+    setMessage('');
+    setError('');
+    setIsCreating(true);
+    try {
+      await createAuditReport();
+      setMessage('Audit report job created successfully.');
+      await loadJobs();
+      window.setTimeout(() => void loadJobs(), 3000);
+    } catch (err) {
+      const nextError = err instanceof Error ? err.message : 'Could not create audit report job.';
       if (nextError === 'Invalid or expired token.') {
         await logoutUser();
       }
@@ -127,7 +181,7 @@ export default function Reports() {
 
   const rows = useMemo(() => jobs.map((job) => [
     `#${job.id}`,
-    job.type,
+    reportTypeLabel(job.type),
     <Badge tone={statusTone(job.status)}>{job.status}</Badge>,
     requestedBy(job.requested_by),
     formatDate(job.created_at),
@@ -145,8 +199,8 @@ export default function Reports() {
       <SectionCard title="Generate Inventory Report" subtitle="Submit RabbitMQ background job">
         <Button onClick={() => void generateInventoryReport()} disabled={isCreating}>{isCreating ? 'Generating...' : 'Generate Inventory Report'}</Button>
       </SectionCard>
-      <SectionCard title="Generate Security Report" subtitle="Coming after Security Center integration."><Button disabled>Generate</Button></SectionCard>
-      <SectionCard title="Generate Audit Report" subtitle="Coming after Audit Logs integration."><Button disabled>Generate</Button></SectionCard>
+      <SectionCard title="Generate Security Report" subtitle="Summarize security risk and suspicious events"><Button onClick={() => void generateSecurityReport()} disabled={isCreating}>{isCreating ? 'Generating...' : 'Generate Security Report'}</Button></SectionCard>
+      <SectionCard title="Generate Audit Report" subtitle="Summarize centralized audit logs"><Button onClick={() => void generateAuditReport()} disabled={isCreating}>{isCreating ? 'Generating...' : 'Generate Audit Report'}</Button></SectionCard>
       <SectionCard title="Generate Low Stock Report" subtitle="Submit low-stock RabbitMQ background job"><Button onClick={() => void generateLowStockReport()} disabled={isCreating}>{isCreating ? 'Generating...' : 'Generate Low Stock Report'}</Button></SectionCard>
     </section>
 

@@ -10,6 +10,10 @@ import { AuthenticatorQrCode } from '../../components/auth/AuthenticatorQrCode';
 
 type LoginStep = 'password' | 'verify-email' | 'two-factor' | 'two-factor-setup';
 
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -29,10 +33,33 @@ export default function Login() {
     navigate(userRole === 'admin' ? '/admin/dashboard' : '/user/dashboard', { replace: true });
   }
 
+  function startGitHubLogin() {
+    window.location.href = '/auth/oauth/github/login';
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError('');
     setMessage('');
+
+    if (step === 'password') {
+      if (!email.trim()) {
+        setError('Email is required.');
+        return;
+      }
+      if (!isValidEmail(email)) {
+        setError('Enter a valid email address.');
+        return;
+      }
+      if (!password) {
+        setError('Password is required.');
+        return;
+      }
+    } else if (!/^\d{6}$/.test(code)) {
+      setError('Code must be exactly 6 digits.');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -45,20 +72,20 @@ export default function Login() {
       }
 
       if (step === 'two-factor') {
-        const user = await verifyTwoFactor(email, code);
+        const user = await verifyTwoFactor(email, code, false);
         setCode('');
         completeLogin(user.role);
         return;
       }
 
       if (step === 'two-factor-setup') {
-        const user = await verifyAuthenticatorSetup(email, code);
+        const user = await verifyAuthenticatorSetup(email, code, false);
         setCode('');
         completeLogin(user.role);
         return;
       }
 
-      const flow = await loginUser(email, password);
+      const flow = await loginUser(email.trim(), password);
       if (flow.email_verification_required) {
         setStep('verify-email');
         setMessage('Email verification required. Enter the code sent to your email, or resend a new code.');
@@ -225,9 +252,8 @@ export default function Login() {
             ) : null}
           </div>
 
-          {step === 'password' ? <div className="mt-5 flex items-center justify-between text-sm">
-            <label className="flex gap-2"><input type="checkbox" /> Remember me</label>
-            <a className="font-semibold text-blue-600">Forgot password?</a>
+          {step === 'password' ? <div className="mt-5 flex justify-end text-sm">
+            <Link className="font-semibold text-blue-600" to="/forgot-password">Forgot password?</Link>
           </div> : null}
 
           <div className="mt-7 grid gap-3">
@@ -236,7 +262,7 @@ export default function Login() {
             </Button>
             {step === 'verify-email' ? <Button type="button" variant="ghost" onClick={() => void handleResendCode()} disabled={isSubmitting}>Resend Code</Button> : null}
             {step !== 'password' ? <Button type="button" variant="ghost" onClick={resetPasswordStep}>Back to sign in</Button> : null}
-            {step === 'password' ? <Button type="button" variant="dark">
+            {step === 'password' ? <Button type="button" variant="dark" onClick={startGitHubLogin}>
               <ShieldCheck size={17} className="mr-2 inline" /> Continue with GitHub
             </Button> : null}
           </div>

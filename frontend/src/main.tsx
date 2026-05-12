@@ -3,6 +3,9 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './routes/App';
 import './styles/globals.css';
+import { applyThemePreference, readStoredThemePreference } from './utils/themePreference';
+
+applyThemePreference(readStoredThemePreference());
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

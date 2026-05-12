@@ -1,7 +1,9 @@
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Path as PathParam, Query, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from dependencies import CurrentUser, require_admin
@@ -22,6 +24,18 @@ REPORTS_DIR = Path("/app/reports")
 app = FastAPI(title="SecureOps Report Service")
 app.add_exception_handler(Exception, safe_exception_handler)
 app.add_exception_handler(HTTPException, safe_http_exception_handler)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "success": False,
+            "message": "Invalid request data.",
+            "data": None,
+        },
+    )
 
 
 def health_response() -> dict[str, str]:
@@ -48,15 +62,18 @@ def gateway_health() -> dict[str, str]:
     return health_response()
 
 
-@app.post("/reports/inventory", response_model=ReportJobActionResponse, status_code=201)
-def request_inventory_report(
+def queue_report_job(
+    *,
     request: Request,
-    current_user: CurrentUser = Depends(require_admin),
-    db: Session = Depends(get_db),
+    db: Session,
+    current_user: CurrentUser,
+    job_type: str,
+    success_message: str,
+    audit_action: str,
 ) -> dict[str, object]:
     job = create_report_job(
         db=db,
-        payload=ReportJobCreate(type="inventory_report"),
+        payload=ReportJobCreate(type=job_type),
         requested_by=current_user.id,
     )
     try:
@@ -84,7 +101,31 @@ def request_inventory_report(
         ip_address=get_client_ip(request),
         details={"job_id": job.id, "type": job.type},
     )
-    return success_response("Inventory report job created successfully.", ReportJobResponse.model_validate(job))
+    send_audit_event(
+        audit_action,
+        SERVICE_NAME,
+        "success",
+        user_id=current_user.id,
+        ip_address=get_client_ip(request),
+        details={"job_id": job.id, "type": job.type},
+    )
+    return success_response(success_message, ReportJobResponse.model_validate(job))
+
+
+@app.post("/reports/inventory", response_model=ReportJobActionResponse, status_code=201)
+def request_inventory_report(
+    request: Request,
+    current_user: CurrentUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    return queue_report_job(
+        request=request,
+        db=db,
+        current_user=current_user,
+        job_type="inventory_report",
+        success_message="Inventory report job created successfully.",
+        audit_action="reports.inventory.created",
+    )
 
 
 @app.post("/reports/low-stock", response_model=ReportJobActionResponse, status_code=201)
@@ -93,42 +134,51 @@ def request_low_stock_report(
     current_user: CurrentUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
-    job = create_report_job(
+    return queue_report_job(
+        request=request,
         db=db,
-        payload=ReportJobCreate(type="low_stock_report"),
-        requested_by=current_user.id,
+        current_user=current_user,
+        job_type="low_stock_report",
+        success_message="Low stock report job created successfully.",
+        audit_action="reports.low_stock.created",
     )
-    try:
-        publish_report_job(job)
-    except ReportQueueError as exc:
-        mark_job_failed(db, job, "Report queue is unavailable.")
-        send_audit_event(
-            "reports.job.failed",
-            SERVICE_NAME,
-            "failure",
-            user_id=current_user.id,
-            ip_address=get_client_ip(request),
-            details={"job_id": job.id, "type": job.type, "reason": "queue_unavailable"},
-        )
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Could not queue report job.",
-        ) from exc
 
-    send_audit_event(
-        "reports.job.created",
-        SERVICE_NAME,
-        "success",
-        user_id=current_user.id,
-        ip_address=get_client_ip(request),
-        details={"job_id": job.id, "type": job.type},
+
+@app.post("/reports/security", response_model=ReportJobActionResponse, status_code=201)
+def request_security_report(
+    request: Request,
+    current_user: CurrentUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    return queue_report_job(
+        request=request,
+        db=db,
+        current_user=current_user,
+        job_type="security_report",
+        success_message="Security report job created successfully.",
+        audit_action="reports.security.created",
     )
-    return success_response("Low stock report job created successfully.", ReportJobResponse.model_validate(job))
+
+
+@app.post("/reports/audit", response_model=ReportJobActionResponse, status_code=201)
+def request_audit_report(
+    request: Request,
+    current_user: CurrentUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    return queue_report_job(
+        request=request,
+        db=db,
+        current_user=current_user,
+        job_type="audit_report",
+        success_message="Audit report job created successfully.",
+        audit_action="reports.audit.created",
+    )
 
 
 @app.get("/reports/jobs", response_model=ReportJobListResponse)
 def jobs(
-    status: str | None = None,
+    status: str | None = Query(default=None, pattern="^(pending|processing|completed|failed)$"),
     current_user: CurrentUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
@@ -141,7 +191,7 @@ def jobs(
 
 @app.get("/reports/jobs/{job_id}", response_model=ReportJobActionResponse)
 def job(
-    job_id: int,
+    job_id: int = PathParam(..., gt=0),
     current_user: CurrentUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
@@ -151,7 +201,7 @@ def job(
 
 @app.get("/reports/jobs/{job_id}/download")
 def download_report(
-    job_id: int,
+    job_id: int = PathParam(..., gt=0),
     current_user: CurrentUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> FileResponse:
@@ -186,7 +236,12 @@ def download_report(
             detail="Report file not found.",
         )
 
-    safe_type = "low_stock_report" if report_job.type == "low_stock_report" else "inventory_report"
+    safe_type = report_job.type if report_job.type in {
+        "inventory_report",
+        "low_stock_report",
+        "security_report",
+        "audit_report",
+    } else "inventory_report"
     filename = f"{safe_type}_job_{report_job.id}.txt"
     return FileResponse(
         path=report_path,

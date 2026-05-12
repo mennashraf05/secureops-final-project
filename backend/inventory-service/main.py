@@ -1,4 +1,6 @@
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
+from typing import Annotated
+
+from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -87,8 +89,8 @@ def create_product_endpoint(
 @app.get("/products")
 @app.get("/products/")
 def list_products_endpoint(
-    search: str | None = Query(default=None),
-    category: str | None = Query(default=None),
+    search: str | None = Query(default=None, max_length=120),
+    category: str | None = Query(default=None, max_length=100),
     low_stock_only: bool = Query(default=False),
     current_user: CurrentUserPayload = Depends(get_current_user_payload),
     db: Session = Depends(get_db),
@@ -135,7 +137,7 @@ def deduct_stock_endpoint(
 
 @app.get("/products/{product_id}")
 def get_product_endpoint(
-    product_id: int,
+    product_id: Annotated[int, Path(gt=0)],
     current_user: CurrentUserPayload = Depends(get_current_user_payload),
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
@@ -145,7 +147,7 @@ def get_product_endpoint(
 
 @app.patch("/products/{product_id}")
 def update_product_endpoint(
-    product_id: int,
+    product_id: Annotated[int, Path(gt=0)],
     payload: ProductUpdate,
     request: Request,
     current_user: CurrentUserPayload = Depends(require_admin),
@@ -165,7 +167,7 @@ def update_product_endpoint(
 
 @app.patch("/products/{product_id}/stock")
 def update_stock_endpoint(
-    product_id: int,
+    product_id: Annotated[int, Path(gt=0)],
     payload: StockUpdate,
     request: Request,
     current_user: CurrentUserPayload = Depends(require_admin),
@@ -185,7 +187,7 @@ def update_stock_endpoint(
 
 @app.delete("/products/{product_id}")
 def delete_product_endpoint(
-    product_id: int,
+    product_id: Annotated[int, Path(gt=0)],
     request: Request,
     current_user: CurrentUserPayload = Depends(require_admin),
     db: Session = Depends(get_db),

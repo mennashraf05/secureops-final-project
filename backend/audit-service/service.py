@@ -3,11 +3,13 @@ from datetime import datetime, timedelta, timezone
 import json
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, text
+from sqlalchemy import and_, func, or_, text
 from sqlalchemy.orm import Session
 
-from models import ALLOWED_AUDIT_STATUSES, AuditLog, DismissedSecurityAlert
+from dependencies import CurrentUser
+from models import ALLOWED_AUDIT_STATUSES, AuditLog, DismissedSecurityAlert, Notification
 from schemas import AuditLogCreate
+from telegram_service import send_telegram_for_audit_log
 
 
 SECURITY_ACTIONS = {
@@ -53,6 +55,266 @@ ALERT_TITLES = {
     "inventory.stock.deduct.failed": "Stock deduction failed",
 }
 
+ALLOWED_NOTIFICATION_CATEGORIES = {"order", "report", "security", "audit", "account", "system"}
+ALLOWED_NOTIFICATION_SEVERITIES = {"info", "success", "warning", "critical"}
+
+SECURITY_NOTIFICATION_META = {
+    "auth.login.failed": ("Failed login detected", "A failed login attempt was recorded.", "warning"),
+    "auth.unauthorized": ("Unauthorized access attempt", "A blocked unauthorized request was recorded.", "critical"),
+    "orders.ownership.denied": ("Unauthorized access attempt", "A user attempted to access another user's order.", "critical"),
+    "reports.job.failed": ("Report failed", "A report job failed.", "warning"),
+    "inventory.stock.deduct.failed": ("Stock deduction failed", "An internal stock deduction attempt failed.", "critical"),
+}
+
+
+def parse_details(details: str | None) -> dict[str, object]:
+    if not details:
+        return {}
+    try:
+        parsed = json.loads(details)
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def int_detail(details: dict[str, object], *keys: str) -> int | None:
+    for key in keys:
+        value = details.get(key)
+        if value is None:
+            continue
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def create_notification(
+    db: Session,
+    *,
+    user_id: int | None,
+    role_target: str | None,
+    title: str,
+    message: str,
+    category: str,
+    severity: str,
+    source_service: str | None = None,
+    source_action: str | None = None,
+    source_id: int | None = None,
+    commit: bool = True,
+) -> Notification:
+    clean_category = category.strip().lower()
+    clean_severity = severity.strip().lower()
+    clean_role = role_target.strip().lower() if role_target else None
+
+    if clean_category not in ALLOWED_NOTIFICATION_CATEGORIES:
+        raise ValueError("Unsupported notification category.")
+    if clean_severity not in ALLOWED_NOTIFICATION_SEVERITIES:
+        raise ValueError("Unsupported notification severity.")
+    if clean_role not in {None, "admin", "user", "all"}:
+        raise ValueError("Unsupported notification role target.")
+
+    notification = Notification(
+        user_id=user_id,
+        role_target=clean_role,
+        title=title.strip(),
+        message=message.strip(),
+        category=clean_category,
+        severity=clean_severity,
+        source_service=source_service,
+        source_action=source_action,
+        source_id=source_id,
+    )
+    db.add(notification)
+    if commit:
+        db.commit()
+        db.refresh(notification)
+    else:
+        db.flush()
+    return notification
+
+
+def notification_visibility_filter(current_user: CurrentUser):
+    if current_user.role == "admin":
+        return or_(
+            Notification.role_target.in_(["admin", "all"]),
+            and_(Notification.user_id.is_(None), Notification.category.in_(["security", "report", "order", "audit", "system"])),
+        )
+
+    return or_(
+        Notification.user_id == current_user.id,
+        Notification.role_target.in_(["user", "all"]),
+    )
+
+
+def get_notifications_for_user(
+    db: Session,
+    *,
+    current_user: CurrentUser,
+    limit: int = 20,
+    unread_only: bool = False,
+) -> list[Notification]:
+    query = db.query(Notification).filter(notification_visibility_filter(current_user))
+    if current_user.role != "admin":
+        query = query.filter(Notification.category != "security")
+    if unread_only:
+        query = query.filter(Notification.is_read.is_(False))
+    return query.order_by(Notification.created_at.desc()).limit(max(1, min(limit, 100))).all()
+
+
+def unread_notification_count(db: Session, *, current_user: CurrentUser) -> int:
+    query = db.query(func.count(Notification.id)).filter(
+        notification_visibility_filter(current_user),
+        Notification.is_read.is_(False),
+    )
+    if current_user.role != "admin":
+        query = query.filter(Notification.category != "security")
+    return int(query.scalar() or 0)
+
+
+def visible_notification(db: Session, *, notification_id: int, current_user: CurrentUser) -> Notification:
+    query = db.query(Notification).filter(
+        Notification.id == notification_id,
+        notification_visibility_filter(current_user),
+    )
+    if current_user.role != "admin":
+        query = query.filter(Notification.category != "security")
+    notification = query.first()
+    if not notification:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Notification not found.",
+        )
+    return notification
+
+
+def mark_notification_read(db: Session, *, notification_id: int, current_user: CurrentUser) -> Notification:
+    notification = visible_notification(db=db, notification_id=notification_id, current_user=current_user)
+    notification.is_read = True
+    db.add(notification)
+    db.commit()
+    db.refresh(notification)
+    return notification
+
+
+def mark_all_notifications_read(db: Session, *, current_user: CurrentUser) -> int:
+    notifications = get_notifications_for_user(db=db, current_user=current_user, limit=100, unread_only=True)
+    for notification in notifications:
+        notification.is_read = True
+        db.add(notification)
+    db.commit()
+    return len(notifications)
+
+
+def notification_from_audit_log(db: Session, log: AuditLog) -> None:
+    details = parse_details(log.details)
+    source_id = int_detail(details, "order_id", "job_id", "audit_log_id")
+
+    if log.action == "orders.order.created":
+        create_notification(
+            db,
+            user_id=None,
+            role_target="admin",
+            title="New product request",
+            message="A user submitted a new product request.",
+            category="order",
+            severity="info",
+            source_service=log.service_name,
+            source_action=log.action,
+            source_id=source_id,
+            commit=False,
+        )
+        return
+
+    if log.action == "orders.order.approved":
+        order_user_id = int_detail(details, "order_user_id", "requester_id") or log.user_id
+        create_notification(
+            db,
+            user_id=order_user_id,
+            role_target=None,
+            title="Order approved",
+            message="Your product request was approved.",
+            category="order",
+            severity="success",
+            source_service=log.service_name,
+            source_action=log.action,
+            source_id=source_id,
+            commit=False,
+        )
+        return
+
+    if log.action == "orders.order.rejected":
+        order_user_id = int_detail(details, "order_user_id", "requester_id") or log.user_id
+        create_notification(
+            db,
+            user_id=order_user_id,
+            role_target=None,
+            title="Order rejected",
+            message="Your product request was rejected.",
+            category="order",
+            severity="warning",
+            source_service=log.service_name,
+            source_action=log.action,
+            source_id=source_id,
+            commit=False,
+        )
+        return
+
+    if log.action == "reports.job.completed":
+        create_notification(
+            db,
+            user_id=None,
+            role_target="admin",
+            title="Report completed",
+            message="A report job completed successfully.",
+            category="report",
+            severity="success",
+            source_service=log.service_name,
+            source_action=log.action,
+            source_id=source_id,
+            commit=False,
+        )
+        return
+
+    if log.action == "reports.job.failed":
+        create_notification(
+            db,
+            user_id=None,
+            role_target="admin",
+            title="Report failed",
+            message="A report job failed.",
+            category="report",
+            severity="warning",
+            source_service=log.service_name,
+            source_action=log.action,
+            source_id=source_id,
+            commit=False,
+        )
+
+    if log.action in SECURITY_ACTIONS:
+        if log.action.endswith("admin.denied"):
+            title = "Admin access denied"
+            message = "A blocked admin-only request was recorded."
+            severity = "critical"
+        else:
+            title, message, severity = SECURITY_NOTIFICATION_META.get(
+                log.action,
+                ("Security alert", "A security-related audit event was recorded.", "warning"),
+            )
+        create_notification(
+            db,
+            user_id=None,
+            role_target="admin",
+            title=title,
+            message=message,
+            category="security",
+            severity=severity,
+            source_service=log.service_name,
+            source_action=log.action,
+            source_id=log.id,
+            commit=False,
+        )
+
 
 def create_audit_log(db: Session, payload: AuditLogCreate) -> AuditLog:
     audit_status = payload.status.strip().lower()
@@ -73,6 +335,16 @@ def create_audit_log(db: Session, payload: AuditLogCreate) -> AuditLog:
     db.add(log)
     db.commit()
     db.refresh(log)
+    try:
+        notification_from_audit_log(db, log)
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        print(f"Notification warning: could not derive notification for {log.action}: {exc.__class__.__name__}", flush=True)
+    try:
+        send_telegram_for_audit_log(log)
+    except Exception as exc:
+        print(f"Telegram warning: could not derive notification for {log.action}: {exc.__class__.__name__}", flush=True)
     return log
 
 
@@ -122,6 +394,36 @@ def delete_audit_log(db: Session, log_id: int) -> None:
     ).delete(synchronize_session=False)
     db.delete(log)
     db.commit()
+
+
+def delete_user_risk_logs(db: Session, user_key: str) -> int:
+    normalized_key = user_key.strip().lower()
+    if normalized_key in {"0", "system"}:
+        query = db.query(AuditLog).filter(AuditLog.user_id.is_(None))
+    else:
+        try:
+            user_id = int(user_key)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User risk profile not found.",
+            ) from exc
+        query = db.query(AuditLog).filter(AuditLog.user_id == user_id)
+
+    logs = query.all()
+    if not logs:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User risk profile not found.",
+        )
+
+    log_ids = [log.id for log in logs]
+    db.query(DismissedSecurityAlert).filter(
+        DismissedSecurityAlert.audit_log_id.in_(log_ids)
+    ).delete(synchronize_session=False)
+    deleted_count = query.delete(synchronize_session=False)
+    db.commit()
+    return int(deleted_count or 0)
 
 
 def dismissed_alert_ids(db: Session) -> set[int]:

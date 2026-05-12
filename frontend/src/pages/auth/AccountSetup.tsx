@@ -10,6 +10,17 @@ import { AuthenticatorQrCode } from '../../components/auth/AuthenticatorQrCode';
 
 type SetupStep = 'password' | 'authenticator';
 
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+function strongEnough(value: string) {
+  return value.length >= 8
+    && /[a-z]/.test(value)
+    && /[A-Z]/.test(value)
+    && /[^A-Za-z]/.test(value);
+}
+
 export default function AccountSetup() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -37,6 +48,18 @@ export default function AccountSetup() {
     setError('');
     setMessage('');
 
+    if (!isValidEmail(email)) {
+      setError('Enter a valid email address.');
+      return;
+    }
+    if (!/^\d{6}$/.test(setupCode)) {
+      setError('Setup code must be exactly 6 digits.');
+      return;
+    }
+    if (!strongEnough(password)) {
+      setError('Password must be at least 8 characters and include uppercase, lowercase, and a number or symbol.');
+      return;
+    }
     if (password !== confirmPassword) {
       setError('Passwords do not match.');
       return;
@@ -44,7 +67,7 @@ export default function AccountSetup() {
 
     setIsSubmitting(true);
     try {
-      const response = await setPassword(email, setupCode, password);
+      const response = await setPassword(email.trim(), setupCode, password);
       setTotpSecret(response.data.totp_secret ?? '');
       setOtpauthUri(response.data.otpauth_uri ?? '');
       setAuthenticatorCode('');
@@ -61,6 +84,10 @@ export default function AccountSetup() {
     event.preventDefault();
     setError('');
     setMessage('');
+    if (!/^\d{6}$/.test(authenticatorCode)) {
+      setError('Authenticator code must be exactly 6 digits.');
+      return;
+    }
     setIsSubmitting(true);
     try {
       const user = await verifyAuthenticatorSetup(email, authenticatorCode);
