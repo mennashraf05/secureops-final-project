@@ -105,6 +105,7 @@ services:
       - postgres
     volumes:
       - file-storage:/app/file-service/storage
+      - ./encrypted-vault-live:/app/file-service/export
     networks:
       - secureops-network
 

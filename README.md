@@ -106,7 +106,7 @@ SecureOps includes:
 - Local browser preferences for UI behavior.
 - Secrets are hidden and not editable through the UI.
 - Telegram notification settings are controlled safely.
-- Secure File Vault and related file-security controls are clearly marked as pending where applicable.
+- Secure File Vault with JWT-protected upload/download, encrypted private storage, and SHA-256 integrity verification.
 
 ### Gateway and Infrastructure
 
@@ -149,7 +149,7 @@ Nginx API Gateway
 - **Report Service**: Report job creation, status tracking, and report download endpoint.
 - **Worker Service**: RabbitMQ consumer that generates report files and updates job status.
 - **Audit Service**: Audit log ingestion, security summaries, risk score, notifications, Security Center data, and settings.
-- **File Service**: Currently health/template only; Secure File Vault work is pending.
+- **File Service**: Secure File Vault upload/download, metadata persistence, encrypted storage, and integrity verification.
 - **PostgreSQL**: Shared persistence for users, products, orders, jobs, audit logs, notifications, settings, and RBAC tables.
 - **RabbitMQ**: Asynchronous report job queue.
 
@@ -189,8 +189,7 @@ Implemented security controls include:
 Not yet implemented:
 
 - HTTPS termination.
-- Secure File Vault.
-- Secure upload validation, encryption, and integrity verification.
+- Attack Simulation backend.
 - Full Attack Simulation backend.
 
 ## 6. Report System
@@ -322,7 +321,7 @@ Admin pages include:
 - Security Center.
 - Settings.
 - Architecture.
-- Secure File Vault placeholder.
+- Secure File Vault.
 - Attack Simulation placeholder/pending workflow.
 
 User pages include:
@@ -330,7 +329,7 @@ User pages include:
 - User Dashboard.
 - Available Products.
 - My Orders.
-- My Files placeholder.
+- My Files.
 - Profile.
 
 ## 12. Documentation
@@ -349,19 +348,101 @@ Detailed implementation notes are stored in `docs/`. Key documents include:
 
 These documents explain the incremental build history and verification flows.
 
-## 13. Known Limitations and Pending Work
+## 13. Secure File Vault
+
+The File Service implements a real secure file vault behind the Nginx gateway.
+
+Security behavior:
+
+- All vault endpoints except `/files/health` require a valid JWT bearer token.
+- Normal users can list, download, verify, and delete only their own files.
+- Admin users can access all secure files.
+- Uploads validate extension and MIME type.
+- Dangerous extensions are blocked, including `.exe`, `.php`, `.js`, `.bat`, `.sh`, `.cmd`, `.ps1`, `.msi`, `.dll`, `.jar`, `.py`, `.html`, and `.htm`.
+- Double-extension bypasses such as `invoice.pdf.exe` are rejected.
+- Path traversal names such as `../../evil.php` are rejected.
+- Each file is encrypted with its own random Fernet file key before being written to the Docker volume.
+- The per-file key is encrypted with the `MASTER_KEY` from `.env` and stored in PostgreSQL as `encrypted_file_key`.
+- The master key is never stored in the database.
+- Plaintext and encrypted SHA-256 hashes are stored in PostgreSQL.
+- Download verifies encrypted-file integrity before decrypting and serving content.
+- Manual integrity verification is available from the frontend and API.
+
+Supported file types by default:
+
+- `pdf`
+- `txt`
+- `csv`
+- `png`
+- `jpg`
+- `jpeg`
+- `docx`
+- `xlsx`
+
+Default upload settings in `.env.example`:
+
+```env
+FILE_MAX_UPLOAD_MB=10
+FILE_ALLOWED_EXTENSIONS=pdf,txt,csv,png,jpg,jpeg,docx,xlsx
+FILE_STORAGE_PATH=/app/file-service/storage/vault
+FERNET_KEY=<placeholder-valid-fernet-key-needed>
+MASTER_KEY=<placeholder-valid-fernet-key-needed>
+```
+
+Generate a valid Fernet key:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Store that generated value in local `.env` as `MASTER_KEY`. Do not commit `.env`.
+
+Docker storage:
+
+- The `file-storage` Docker volume is mounted at `/app/file-service/storage`.
+- Encrypted vault files are stored under `/app/file-service/storage/vault`.
+- The frontend/public folder is never used for uploaded file storage.
+
+API examples require a JWT:
+
+```bash
+TOKEN="paste-jwt-here"
+
+curl http://localhost:8080/files/health
+
+curl -H "Authorization: Bearer $TOKEN" \
+  -F "file=@README.md;type=text/plain;filename=valid.txt" \
+  http://localhost:8080/files/upload
+
+curl -H "Authorization: Bearer $TOKEN" \
+  -F "file=@README.md;type=application/octet-stream;filename=payload.exe" \
+  http://localhost:8080/files/upload
+
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8080/files
+
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8080/files/1/download --output downloaded-file
+
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8080/files/1/verify-integrity
+```
+
+Run the file-service tests:
+
+```bash
+docker compose exec file-service python -m pytest test_file_upload.py -q
+```
+
+## 14. Known Limitations and Pending Work
 
 The following areas are intentionally not complete yet:
 
 - HTTPS termination is not implemented.
-- Secure File Vault is not implemented.
-- Secure file upload validation is not implemented.
-- File encryption and integrity verification are not implemented.
-- File Service is currently health/template only unless later work adds vault features.
 - Attack Simulation backend is pending/coming soon.
 - Production-grade database migrations are not fully separated from startup-safe local migration logic.
 
-## 14. Safety Notes
+## 15. Safety Notes
 
 - Do not commit `.env`.
 - Do not expose real secrets in documentation, screenshots, reports, or frontend UI.
@@ -369,7 +450,7 @@ The following areas are intentionally not complete yet:
 - Downloaded reports are designed to summarize operational and security data without exposing secrets.
 - Backend validation remains the source of truth for security validation.
 
-## 15. Quick Verification
+## 16. Quick Verification
 
 After starting the stack, verify:
 
@@ -379,6 +460,7 @@ curl http://localhost:8080/products/health
 curl http://localhost:8080/orders/health
 curl http://localhost:8080/reports/health
 curl http://localhost:8080/audit/health
+curl http://localhost:8080/files/health
 ```
 
 Then test from the browser:
