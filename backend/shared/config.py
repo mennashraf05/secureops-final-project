@@ -18,6 +18,12 @@ class Settings(BaseSettings):
 
     internal_api_key: str
     fernet_key: str
+    master_key: str | None = None
+
+    file_max_upload_mb: int = 10
+    file_allowed_extensions: str = "pdf,txt,csv,png,jpg,jpeg,docx,xlsx"
+    file_storage_path: str = "/app/file-service/storage/vault"
+    file_export_path: str = "/app/file-service/export"
 
     frontend_port: int = 5173
     github_client_id: str | None = None

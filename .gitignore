@@ -9,3 +9,6 @@ frontend/dist/
 *.tsbuildinfo
 frontend/tsconfig.tsbuildinfo
 .DS_Store
+encrypted-vault-live/
+encrypted-vault-export-*/
+encrypted-vault-files-*.zip
