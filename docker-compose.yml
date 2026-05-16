@@ -3,9 +3,11 @@ services:
     image: nginx:1.27-alpine
     container_name: secureops-nginx
     ports:
-      - "8080:80"
+      - "8080:80"    # HTTP traffic (Host 8080 -> Container 80)
+      - "8443:443"   # HTTPS traffic (Host 8443 -> Container 443)
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro   # Mounts your local keys directory safely
     depends_on:
       - frontend
       - auth-service
@@ -140,6 +142,21 @@ services:
       - "8000"
     depends_on:
       - postgres
+    networks:
+      - secureops-network
+  
+  simulation-service:
+    build:
+      context: ./backend
+      dockerfile: simulation-service/Dockerfile
+    container_name: secureops-simulation-service
+    env_file:
+      - .env
+    expose:
+      - "8000"
+    depends_on:
+      - postgres
+      - nginx
     networks:
       - secureops-network
 

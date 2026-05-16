@@ -47,6 +47,7 @@ def get_current_user(
             credentials.credentials,
             settings.jwt_secret,
             algorithms=[settings.jwt_algorithm],
+            leeway=10
         )
         user_id = int(payload.get("sub", ""))
         role = str(payload.get("role", ""))

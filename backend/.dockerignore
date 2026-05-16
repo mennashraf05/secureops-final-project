@@ -1,4 +1,9 @@
-__pycache__
-*.pyc
-.pytest_cache
-.venv
+**/__pycache__
+**/.venv
+**/venv
+**/.env
+**/.git
+**/.pytest_cache
+file-service/storage/*
+!file-service/storage/.gitkeep
+**/.pyc
