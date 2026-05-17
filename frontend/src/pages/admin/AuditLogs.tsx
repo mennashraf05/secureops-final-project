@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { deleteAuditLog, getAuditLogs } from '../../api/audit';
-import { useAuth } from '../../auth/AuthContext';
 import { PageHeader } from '../../components/layout/Page';
 import { KpiCard } from '../../components/cards/KpiCard';
 import { SectionCard } from '../../components/cards/SectionCard';
@@ -46,7 +45,6 @@ function detailsPreview(value: string | null) {
 }
 
 export default function AuditLogs() {
-  const { logoutUser } = useAuth();
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [serviceFilter, setServiceFilter] = useState<ServiceFilter>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -73,9 +71,6 @@ export default function AuditLogs() {
       }));
     } catch (err) {
       const nextError = err instanceof Error ? err.message : 'Could not load audit logs.';
-      if (nextError === 'Invalid or expired token.') {
-        await logoutUser();
-      }
       setError(nextError);
     } finally {
       setIsLoading(false);
@@ -94,9 +89,6 @@ export default function AuditLogs() {
       setSuccess(`Audit log #${log.id} deleted successfully.`);
     } catch (err) {
       const nextError = err instanceof Error ? err.message : 'Could not delete audit log.';
-      if (nextError === 'Invalid or expired token.') {
-        await logoutUser();
-      }
       setError(nextError);
     } finally {
       setDeletingLogId(null);

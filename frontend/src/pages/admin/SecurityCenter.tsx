@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { deleteUserRiskEvents, dismissSecurityAlert, getSecurityCharts, getSecurityOverview, getUserRiskScores } from '../../api/monitoring';
-import { useAuth } from '../../auth/AuthContext';
 import { PageHeader } from '../../components/layout/Page';
 import { KpiCard } from '../../components/cards/KpiCard';
 import { SectionCard } from '../../components/cards/SectionCard';
@@ -18,7 +17,6 @@ function riskTone(level?: RiskLevel) {
 }
 
 export default function SecurityCenter() {
- const { logoutUser } = useAuth();
  const [overview, setOverview] = useState<SecurityOverview | null>(null);
  const [charts, setCharts] = useState<SecurityCharts | null>(null);
  const [userRiskScores, setUserRiskScores] = useState<UserRiskScore[]>([]);
@@ -43,9 +41,6 @@ export default function SecurityCenter() {
    setUserRiskScores(await getUserRiskScores({ limit: riskLimit, risk_level: riskLevelFilter }));
   } catch (err) {
    const nextError = err instanceof Error ? err.message : 'Could not load security overview.';
-   if (nextError === 'Invalid or expired token.') {
-    await logoutUser();
-   }
    setError(nextError);
   } finally {
    setIsLoading(false);
@@ -64,9 +59,6 @@ export default function SecurityCenter() {
    await loadOverview();
   } catch (err) {
    const nextError = err instanceof Error ? err.message : 'Could not dismiss security alert.';
-   if (nextError === 'Invalid or expired token.') {
-    await logoutUser();
-   }
    setError(nextError);
   } finally {
    setDismissingAlertId(null);
@@ -87,9 +79,6 @@ export default function SecurityCenter() {
    await loadOverview();
   } catch (err) {
    const nextError = err instanceof Error ? err.message : 'Could not delete risk events.';
-   if (nextError === 'Invalid or expired token.') {
-    await logoutUser();
-   }
    setError(nextError);
   } finally {
    setDeletingRiskKey(null);

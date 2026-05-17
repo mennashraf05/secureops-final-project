@@ -1,4 +1,4 @@
-import { request, requestBlob, type ApiResponse } from './client';
+import { getAuthHeaders, request, requestBlob, type ApiResponse } from './client';
 
 export type SecureFile = {
   id: number;
@@ -23,12 +23,6 @@ export type IntegrityResult = {
   encrypted_sha256_matches: boolean;
 };
 
-const TOKEN_STORAGE_KEY = 'secureops_token';
-
-function getStoredToken() {
-  return localStorage.getItem(TOKEN_STORAGE_KEY) ?? sessionStorage.getItem(TOKEN_STORAGE_KEY);
-}
-
 async function parseUploadError(response: Response) {
   try {
     const body = await response.json() as { message?: string; detail?: string };
@@ -42,9 +36,7 @@ export async function uploadSecureFile(file: File) {
   const formData = new FormData();
   formData.append('file', file);
 
-  const headers = new Headers();
-  const token = getStoredToken();
-  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const headers = getAuthHeaders();
 
   const response = await fetch('/files/upload', {
     method: 'POST',

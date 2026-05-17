@@ -59,6 +59,7 @@ async def require_admin(authorization: str = Header(...)):
 async def run_simulation(
     scenario_id: str,
     background_tasks: BackgroundTasks,
+    authorization: str = Header(...),
     db: Session = Depends(get_db),
     current_user = Depends(require_admin)
 ):
@@ -71,16 +72,24 @@ async def run_simulation(
         "rate-limit": simulator.simulate_rate_limiting,
         "authz-bypass": simulator.simulate_authz_bypass,
         "auth-abuse": simulator.simulate_auth_abuse,       
-        "internal-svc": simulator.simulate_internal_svc,   
+        "internal-svc": simulator.simulate_internal_svc,
+        "file-security": simulator.simulate_file_security_validation,
     }
 
     if scenario_id not in scenarios:
         raise HTTPException(status_code=404, detail="Scenario not found")
 
-    background_tasks.add_task(scenarios[scenario_id], new_run.id)
+    background_tasks.add_task(scenarios[scenario_id], new_run.id, authorization)
     return success_response(f"Simulation {scenario_id} started.", {"id": new_run.id})
 
 @app.get("/simulations/history")
 async def get_history(db: Session = Depends(get_db), current_user = Depends(require_admin)):
     history = db.query(SimulationRun).order_by(SimulationRun.created_at.desc()).all()
     return success_response("History retrieved.", history)
+
+
+@app.delete("/simulations/history")
+async def clear_history(db: Session = Depends(get_db), current_user = Depends(require_admin)):
+    deleted_count = db.query(SimulationRun).delete(synchronize_session=False)
+    db.commit()
+    return success_response("Simulation history cleared.", {"deleted_count": deleted_count})

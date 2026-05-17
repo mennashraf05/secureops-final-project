@@ -16,5 +16,11 @@ export const simulationApi = {
     return request<ApiResponse<SimulationResult[]>>('/simulations/history', {
       method: 'GET',
     });
-  }
+  },
+
+  clearHistory: async (): Promise<ApiResponse<{ deleted_count: number }>> => {
+    return request<ApiResponse<{ deleted_count: number }>>('/simulations/history', {
+      method: 'DELETE',
+    });
+  },
 };

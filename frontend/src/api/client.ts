@@ -47,13 +47,81 @@ type ApiErrorBody = {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 const TOKEN_STORAGE_KEY = 'secureops_token';
+const USER_STORAGE_KEY = 'secureops_user';
+const LEGACY_TOKEN_STORAGE_KEYS = ['access_token', 'token', 'authToken'];
+export const AUTH_EXPIRED_EVENT = 'secureops-auth-expired';
 
 function buildUrl(path: string) {
   return `${API_BASE_URL}${path}`;
 }
 
-function getStoredToken() {
-  return localStorage.getItem(TOKEN_STORAGE_KEY) ?? sessionStorage.getItem(TOKEN_STORAGE_KEY);
+function storageToken(storage: Storage) {
+  const currentToken = storage.getItem(TOKEN_STORAGE_KEY);
+  if (currentToken) return currentToken;
+
+  const legacyToken = LEGACY_TOKEN_STORAGE_KEYS
+    .map((key) => storage.getItem(key))
+    .find((value): value is string => Boolean(value));
+
+  if (legacyToken) {
+    storage.setItem(TOKEN_STORAGE_KEY, legacyToken);
+  }
+
+  return legacyToken ?? null;
+}
+
+export function getStoredToken() {
+  return storageToken(localStorage) ?? storageToken(sessionStorage);
+}
+
+export function getAuthHeaders(headers?: HeadersInit) {
+  const nextHeaders = new Headers(headers);
+  const token = getStoredToken();
+
+  if (token) {
+    nextHeaders.set('Authorization', `Bearer ${token}`);
+  }
+
+  return nextHeaders;
+}
+
+export function clearStoredAuth() {
+  localStorage.removeItem(TOKEN_STORAGE_KEY);
+  localStorage.removeItem(USER_STORAGE_KEY);
+  sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+  sessionStorage.removeItem(USER_STORAGE_KEY);
+
+  for (const key of LEGACY_TOKEN_STORAGE_KEYS) {
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+  }
+}
+
+function isAuthFlowPath(path: string) {
+  return path.startsWith('/auth/login')
+    || path.startsWith('/auth/register')
+    || path.startsWith('/auth/verify-email')
+    || path.startsWith('/auth/resend-verification')
+    || path.startsWith('/auth/password/')
+    || path.startsWith('/auth/set-password')
+    || path.startsWith('/auth/2fa/');
+}
+
+function isSessionCheckPath(path: string) {
+  return path === '/auth/me';
+}
+
+function notifyAuthExpired(path: string, failedToken: string | null) {
+  const currentToken = getStoredToken();
+  if (failedToken && currentToken && failedToken !== currentToken) {
+    return;
+  }
+
+  clearStoredAuth();
+  window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT));
+  if (!isAuthFlowPath(path) && window.location.pathname !== '/login') {
+    window.location.assign('/login');
+  }
 }
 
 async function parseError(response: Response) {
@@ -77,15 +145,11 @@ async function parseError(response: Response) {
 }
 
 export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const headers = new Headers(options.headers);
-  const token = getStoredToken();
+  const requestToken = getStoredToken();
+  const headers = getAuthHeaders(options.headers);
 
   if (!headers.has('Content-Type') && options.body) {
     headers.set('Content-Type', 'application/json');
-  }
-
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
   }
 
   const response = await fetch(buildUrl(path), {
@@ -94,19 +158,19 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
   });
 
   if (!response.ok) {
-    throw new Error(await parseError(response));
+    const message = await parseError(response);
+    if (response.status === 401 && isSessionCheckPath(path)) {
+      notifyAuthExpired(path, requestToken);
+    }
+    throw new Error(message);
   }
 
   return response.json() as Promise<T>;
 }
 
 export async function requestBlob(path: string, options: RequestInit = {}) {
-  const headers = new Headers(options.headers);
-  const token = getStoredToken();
-
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
+  const requestToken = getStoredToken();
+  const headers = getAuthHeaders(options.headers);
 
   const response = await fetch(buildUrl(path), {
     ...options,
@@ -114,7 +178,11 @@ export async function requestBlob(path: string, options: RequestInit = {}) {
   });
 
   if (!response.ok) {
-    throw new Error(await parseError(response));
+    const message = await parseError(response);
+    if (response.status === 401 && isSessionCheckPath(path)) {
+      notifyAuthExpired(path, requestToken);
+    }
+    throw new Error(message);
   }
 
   return response;

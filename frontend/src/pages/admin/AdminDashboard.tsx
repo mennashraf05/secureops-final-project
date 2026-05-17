@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { Boxes, FileCheck, ShieldAlert, Zap } from 'lucide-react';
 import { getMonitoringSummary, getSecurityOverview } from '../../api/monitoring';
 import { createInventoryReport } from '../../api/reports';
-import { useAuth } from '../../auth/AuthContext';
 import { KpiCard } from '../../components/cards/KpiCard';
 import { SectionCard } from '../../components/cards/SectionCard';
 import { DataTable } from '../../components/tables/DataTable';
@@ -19,7 +18,6 @@ function riskTone(level?: MonitoringSummary['risk_level']) {
 }
 
 export default function AdminDashboard() {
-  const { logoutUser } = useAuth();
   const navigate = useNavigate();
   const [summary, setSummary] = useState<MonitoringSummary | null>(null);
   const [security, setSecurity] = useState<SecurityOverview | null>(null);
@@ -40,9 +38,6 @@ export default function AdminDashboard() {
       setSecurity(nextSecurity);
     } catch (err) {
       const nextError = err instanceof Error ? err.message : 'Could not load monitoring data.';
-      if (nextError === 'Invalid or expired token.') {
-        await logoutUser();
-      }
       setError(nextError);
     } finally {
       setIsLoading(false);
@@ -66,9 +61,6 @@ export default function AdminDashboard() {
       navigate('/admin/reports');
     } catch (err) {
       const nextError = err instanceof Error ? err.message : 'Could not create inventory report.';
-      if (nextError === 'Invalid or expired token.') {
-        await logoutUser();
-      }
       setError(nextError);
     } finally {
       setIsGeneratingReport(false);
@@ -100,6 +92,6 @@ export default function AdminDashboard() {
     <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{metrics.map(m => <KpiCard key={m.label} {...m}/>)}</section>
     <section className="mt-7 grid gap-6 xl:grid-cols-2"><SectionCard title="Risk Score Trend" subtitle="Weekly risk score movement"><RiskLineChart/></SectionCard><SectionCard title="Security Events Overview" subtitle="Blocked and reviewed events"><EventsBarChart/></SectionCard></section>
     <section className="mt-7 grid gap-6 xl:grid-cols-3"><SectionCard title="Recent Security Alerts" subtitle="Live suspicious activity">{alertRows.length ? <DataTable columns={['Event','User / IP','Severity','Status']} rows={alertRows}/> : <p className="text-sm font-semibold text-slate-500">No active security alerts.</p>}</SectionCard><SectionCard title="Order Status" subtitle="Operational order flow"><DataTable columns={['Status','Count','Signal']} rows={[['Pending', String(summary?.pending_orders ?? 0), 'Review'], ['Approved', String(summary?.approved_orders ?? 0), 'Healthy'], ['Rejected', String(summary?.rejected_orders ?? 0), 'Closed']]}/></SectionCard><SectionCard title="Quick Actions" subtitle="Common admin operations"><div className="grid gap-3"><Button onClick={() => navigate('/admin/products?action=add')}><Boxes className="mr-2 inline" size={17}/>Add Product</Button><Button variant="ghost" onClick={() => setQuickActionMessage('File integrity verification will be available after Secure File Vault integration.')}><FileCheck className="mr-2 inline" size={17}/>Verify File Integrity</Button><Button variant="ghost" onClick={() => navigate('/admin/security')}><ShieldAlert className="mr-2 inline" size={17}/>Open Security Center</Button><Button variant="ghost" onClick={() => navigate('/admin/attack-simulation')}><Zap className="mr-2 inline" size={17}/>Run Attack Simulation</Button></div></SectionCard></section>
-    <section className="mt-7"><SectionCard title="System Health" subtitle="Nginx, Auth, Inventory, Orders, Files, PostgreSQL, RabbitMQ, Worker Service"><div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">{['Nginx Gateway','Auth Service','Inventory Service','Order Service','File Service','Report Service','PostgreSQL','RabbitMQ','Worker Service'].map((s)=><div key={s} className="rounded-2xl bg-slate-50 p-4"><span className="mr-2 inline-block h-2.5 w-2.5 animate-pulseSoft rounded-full bg-emerald-500"/><p className="font-bold text-slate-800">{s}</p><p className="mt-1 text-xs text-slate-500">Live monitoring</p></div>)}</div></SectionCard></section>
+    <section className="mt-7"><SectionCard title="System Health" subtitle="Gateway, application domains, storage, queue, and background processing"><div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">{['API Gateway','Identity Domain','Inventory Domain','Order Domain','Secure File Vault','Report Domain','Managed Data Store','Async Queue','Background Processing'].map((s)=><div key={s} className="rounded-2xl bg-slate-50 p-4"><span className="mr-2 inline-block h-2.5 w-2.5 animate-pulseSoft rounded-full bg-emerald-500"/><p className="font-bold text-slate-800">{s}</p><p className="mt-1 text-xs text-slate-500">Live monitoring</p></div>)}</div></SectionCard></section>
   </>;
 }

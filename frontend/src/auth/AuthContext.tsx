@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { getMe, login, logout, register, verify2FA, verifyTotpSetup, type AuthUser, type LoginFlowData, type RegisterResponse } from '../api/client';
+import { AUTH_EXPIRED_EVENT, clearStoredAuth, getMe, getStoredToken, login, logout, register, verify2FA, verifyTotpSetup, type AuthUser, type LoginFlowData, type RegisterResponse } from '../api/client';
 
 type AuthContextValue = {
   token: string | null;
@@ -21,29 +21,13 @@ const USER_STORAGE_KEY = 'secureops_user';
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-function readStoredUser() {
-  const rawUser = localStorage.getItem(USER_STORAGE_KEY) ?? sessionStorage.getItem(USER_STORAGE_KEY);
-  if (!rawUser) return null;
-
-  try {
-    return JSON.parse(rawUser) as AuthUser;
-  } catch {
-    localStorage.removeItem(USER_STORAGE_KEY);
-    sessionStorage.removeItem(USER_STORAGE_KEY);
-    return null;
-  }
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_STORAGE_KEY) ?? sessionStorage.getItem(TOKEN_STORAGE_KEY));
-  const [user, setUser] = useState<AuthUser | null>(() => readStoredUser());
+  const [token, setToken] = useState<string | null>(() => getStoredToken());
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const clearAuth = useCallback(() => {
-    localStorage.removeItem(TOKEN_STORAGE_KEY);
-    localStorage.removeItem(USER_STORAGE_KEY);
-    sessionStorage.removeItem(TOKEN_STORAGE_KEY);
-    sessionStorage.removeItem(USER_STORAGE_KEY);
+    clearStoredAuth();
     setToken(null);
     setUser(null);
   }, []);
@@ -60,7 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshCurrentUser = useCallback(async () => {
-    const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY) ?? sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    const storedToken = getStoredToken();
     if (!storedToken) {
       clearAuth();
       setIsLoading(false);
@@ -84,12 +68,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void refreshCurrentUser();
   }, [refreshCurrentUser]);
 
+  useEffect(() => {
+    function handleAuthExpired() {
+      clearAuth();
+      setIsLoading(false);
+    }
+
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+  }, [clearAuth]);
+
   const loginUser = useCallback(
     async (email: string, password: string) => {
+      clearAuth();
       const response = await login(email, password);
       return response.data;
     },
-    [],
+    [clearAuth],
   );
 
   const verifyTwoFactor = useCallback(
